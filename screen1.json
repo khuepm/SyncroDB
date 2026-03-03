@@ -1,0 +1,31 @@
+{
+  "screenshot": {
+    "name": "projects/16266398012239050806/files/e428199cc0be447e9f0f07e12fa0e188",
+    "downloadUrl": "https://lh3.googleusercontent.com/aida/AOfcidXS6-0Byq-AL1xzZjXuvPcqlfvdeS9ZRWLbsELOo-Qd0nT81sfR4QTH9gFvp2gXBaRN3PmflNF2Yca5om60pFuilmZ0SpkXbOfszLFQfArLIfOz18pHdzOScJOjRIkGUPDI3CShtG1hIbOC705ZXR7wMOMu0LrOB1p0EvANaj2NQmh3gtGCzgjjH0kKS2Sc5XJxfStgTesO1MB8GRm88H26ic8H4t7RGJfUenuOZgfy8oFvHKpEOu1DB1V2"
+  },
+  "htmlCode": {
+    "name": "projects/16266398012239050806/files/0181608d09f94fa198cf81379df89d60",
+    "downloadUrl": "https://contribution.usercontent.google.com/download?c=CgthaWRhX2NvZGVmeBJ8Eh1hcHBfY29tcGFuaW9uX2dlbmVyYXRlZF9maWxlcxpbCiVodG1sXzhmN2I3OGFiYzExZDQ2ZGM4NmJkMWE4ZjM5YWU1ZGE1EgsSBxCKmp7B6xgYAZIBJAoKcHJvamVjdF9pZBIWQhQxNjI2NjM5ODAxMjIzOTA1MDgwNg&filename=&opi=89354086",
+    "mimeType": "text/html"
+  },
+  "id": "2489cef2db7a4792842201db32401ac6",
+  "generatedBy": "figaro_agent",
+  "width": "2560",
+  "height": "2048",
+  "title": "Connection JSON Config",
+  "prompt": "Create a JSON configuration screen for database connections in the SyncroDB Cyber-Industrial style. \n\nThe screen should feature:\n- A full-height monospaced code editor (JetBrains Mono) showing a JSON structure for connections.\n- The JSON should include keys like 'connections', 'sources', and 'targets' with properties like 'name', 'url', 'type', and 'status'.\n- Syntax highlighting consistent with the theme (Cyan for keys, Green for strings, Orange for numbers).\n- A header bar with the SyncroDB logo, the filename 'connections.config.json', and action buttons: 'Save Config', 'Import File', and 'Validate JSON'.\n- A sidebar or status panel showing 'JSON Validation: Valid' in neon green.\n- The design must match the existing theme {{DATA:THEME:THEME_2}} with its deep void background (#0D1117), panel backgrounds (#161B22), and cyan accents.\n- Include subtle grid lines and a brutalist, technical layout as described in {{DATA:TEXT:TEXT_6}}.",
+  "name": "projects/16266398012239050806/screens/2489cef2db7a4792842201db32401ac6",
+  "theme": {
+    "colorMode": "DARK",
+    "font": "SPACE_GROTESK",
+    "roundness": "ROUND_FOUR",
+    "customColor": "#0df2e3",
+    "saturation": 3
+  },
+  "deviceType": "DESKTOP",
+  "screenType": "DESIGN",
+  "screenMetadata": {
+    "agentType": "HATTER_AGENT",
+    "status": "COMPLETE"
+  }
+}

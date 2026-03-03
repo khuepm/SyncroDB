@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SyncroDB - Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df2e3", // Cyan Neon
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0D1117", // Deep Void from PRD
+                        "surface": "#161B22", // Surface from PRD
+                        "border-subtle": "#30363D", // Border from PRD
+                        "text-primary": "#E6EDF3", // Text Primary from PRD
+                        "text-muted": "#8B949E", // Text Muted from PRD
+                        "diff-add": "#2EA043",
+                        "diff-mod": "#D29922",
+                        "diff-del": "#F85149",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "monospace"],
+                        "mono": ["Space Grotesk", "monospace"], // Using Space Grotesk as mono-like for this design to match components
+                    },
+                    borderRadius: {"DEFAULT": "2px", "lg": "4px", "xl": "6px", "full": "9999px"},
+                    backgroundImage: {
+                        'grid-pattern': "linear-gradient(to right, #30363D 1px, transparent 1px), linear-gradient(to bottom, #30363D 1px, transparent 1px)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for the cyber-industrial look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D1117; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363D; 
+            border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0df2e3; 
+        }
+        
+        .scanline {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-text-primary font-display min-h-screen flex flex-col overflow-hidden selection:bg-primary selection:text-background-dark">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-border-subtle bg-surface px-6 py-3 z-20 relative">
+<div class="flex items-center gap-4 text-white">
+<div class="size-6 text-primary animate-pulse">
+<span class="material-symbols-outlined text-2xl">terminal</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-tight">SYNCRO_DB <span class="text-primary text-xs font-normal align-top ml-1">v2.0.4</span></h2>
+</div>
+<!-- Status Indicator / Top Right Actions -->
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1 rounded bg-black/30 border border-border-subtle">
+<div class="size-2 rounded-full bg-diff-add shadow-[0_0_8px_rgba(46,160,67,0.6)]"></div>
+<span class="text-xs font-mono text-text-muted">SYSTEM_ONLINE</span>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded size-8 bg-surface border border-border-subtle text-text-muted hover:text-primary hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<button class="flex items-center justify-center rounded size-8 bg-surface border border-border-subtle text-text-muted hover:text-primary hover:border-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+<div class="w-[1px] h-8 bg-border-subtle mx-1"></div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded size-8 border border-border-subtle grayscale hover:grayscale-0 transition-all cursor-pointer" data-alt="User avatar, stylized pixelated face" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBP1RphcBc2DSwYtfbBYeu-QEdyWxGCbvXoV8GLWSB6ok1HSOThWjva2UoZ0WnQjrMCKw7bD80fXDVhIPogkIXVEPVjYF27RWwb7eOLmvIgVXlhqIM8kfF_w0egGWcQZd1JQHmR1rY4NRSz0di9O7P60LcDZVPqDtEzcPp_xJ5lCYqa0h-xzgVt2ZNSLBQABHSfkjTG72mZPWOo3atNaWy5ZgHqn1pJbUyCB_GSLrnLN2uUena31R74sWbCTHDpACwqnMiQp4Ohl-qG");'></div>
+</div>
+</div>
+</header>
+<!-- Main Workspace -->
+<div class="flex flex-1 overflow-hidden relative">
+<!-- Background Grid Effect -->
+<div class="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" style="background-size: 40px 40px; background-image: linear-gradient(to right, #30363D 1px, transparent 1px), linear-gradient(to bottom, #30363D 1px, transparent 1px);"></div>
+<!-- Left Panel: Connections -->
+<aside class="w-[420px] flex flex-col border-r border-border-subtle bg-background-dark/95 backdrop-blur z-10">
+<div class="p-5 border-b border-border-subtle flex justify-between items-center">
+<h3 class="text-sm font-bold tracking-widest text-text-muted uppercase">// CONNECTION_LIBRARY</h3>
+<button class="text-primary hover:text-white transition-colors flex items-center gap-1 text-xs font-bold border border-primary/30 px-2 py-1 rounded hover:bg-primary/10">
+<span class="material-symbols-outlined text-[14px]">add</span> NEW
+                </button>
+</div>
+<div class="flex-1 overflow-y-auto p-5 space-y-4">
+<!-- Connection Card: Active/Selected -->
+<div class="group relative cursor-pointer border border-primary bg-primary/5 p-4 rounded hover:bg-primary/10 transition-all">
+<div class="absolute -right-1 -top-1 flex size-3">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full size-3 bg-primary"></span>
+</div>
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">database</span>
+<span class="font-bold text-white text-sm">PROD_AWS_MAIN</span>
+</div>
+<span class="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">SOURCE</span>
+</div>
+<div class="font-mono text-xs text-text-muted break-all mb-4 pl-7 border-l border-border-subtle">
+                        postgres://admin@aws-useast-1:5432/production_v2
+                    </div>
+<div class="flex items-center justify-between text-[11px] text-text-muted font-mono">
+<span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-diff-add"></span>ONLINE</span>
+<span>34ms</span>
+</div>
+</div>
+<!-- Connection Card: Inactive -->
+<div class="group cursor-pointer border border-border-subtle bg-surface p-4 rounded hover:border-text-muted hover:bg-surface/80 transition-all">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-muted group-hover:text-white transition-colors">database</span>
+<span class="font-bold text-text-primary group-hover:text-white transition-colors text-sm">STAGING_HEROKU</span>
+</div>
+<span class="text-[10px] font-mono text-text-muted bg-border-subtle/50 px-1.5 py-0.5 rounded">TARGET</span>
+</div>
+<div class="font-mono text-xs text-text-muted break-all mb-4 pl-7 border-l border-border-subtle group-hover:border-text-muted transition-colors">
+                        postgres://dev@heroku-sl:5432/staging_db
+                    </div>
+<div class="flex items-center justify-between text-[11px] text-text-muted font-mono">
+<span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-diff-add"></span>ONLINE</span>
+<span>112ms</span>
+</div>
+</div>
+<!-- Connection Card: Inactive -->
+<div class="group cursor-pointer border border-border-subtle bg-surface p-4 rounded hover:border-text-muted hover:bg-surface/80 transition-all opacity-70">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-muted">dns</span>
+<span class="font-bold text-text-primary text-sm">LOCAL_DEV</span>
+</div>
+</div>
+<div class="font-mono text-xs text-text-muted break-all mb-4 pl-7 border-l border-border-subtle">
+                        postgres://localhost:5432/db_local
+                    </div>
+<div class="flex items-center justify-between text-[11px] text-text-muted font-mono">
+<span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-diff-del"></span>OFFLINE</span>
+<span>--</span>
+</div>
+</div>
+<!-- Connection Card: Inactive -->
+<div class="group cursor-pointer border border-border-subtle bg-surface p-4 rounded hover:border-text-muted hover:bg-surface/80 transition-all">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-muted group-hover:text-white transition-colors">database</span>
+<span class="font-bold text-text-primary group-hover:text-white transition-colors text-sm">LEGACY_ARCHIVE</span>
+</div>
+<span class="text-[10px] font-mono text-diff-mod bg-diff-mod/10 border border-diff-mod/20 px-1.5 py-0.5 rounded">READ-ONLY</span>
+</div>
+<div class="font-mono text-xs text-text-muted break-all mb-4 pl-7 border-l border-border-subtle group-hover:border-text-muted transition-colors">
+                        postgres://ro_user@legacy-ovh:5432/archived_2023
+                    </div>
+<div class="flex items-center justify-between text-[11px] text-text-muted font-mono">
+<span class="flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-diff-add"></span>ONLINE</span>
+<span>89ms</span>
+</div>
+</div>
+</div>
+<div class="p-4 border-t border-border-subtle">
+<div class="text-[10px] text-text-muted font-mono text-center opacity-50">
+                    SYNCRO_DB SHELL v2.0.4 [BUILD 8921]
+                </div>
+</div>
+</aside>
+<!-- Right Panel: Active Configuration (Staging Area) -->
+<main class="flex-1 flex flex-col bg-background-dark/50 relative z-10">
+<!-- Header -->
+<div class="p-5 border-b border-border-subtle">
+<h3 class="text-sm font-bold tracking-widest text-primary uppercase flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">tune</span>
+                    // ACTIVE_CONFIGURATION
+                </h3>
+</div>
+<div class="flex-1 p-10 flex flex-col gap-8 max-w-5xl mx-auto w-full">
+<!-- Comparison Slot Config -->
+<div class="grid grid-cols-[1fr_auto_1fr] gap-6 items-center">
+<!-- Source Dropzone -->
+<div class="flex flex-col gap-2">
+<span class="text-xs font-mono text-text-muted uppercase tracking-wider ml-1">SOURCE [TRUTH]</span>
+<div class="h-40 border border-primary bg-primary/5 rounded relative flex flex-col p-5 group">
+<div class="absolute top-0 left-0 w-2 h-2 border-t border-l border-primary"></div>
+<div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-primary"></div>
+<div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-primary"></div>
+<div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-primary"></div>
+<div class="flex justify-between items-start mb-2">
+<span class="material-symbols-outlined text-primary text-3xl">database</span>
+<div class="px-2 py-0.5 bg-primary text-black font-bold text-[10px] rounded-sm">LOCKED</div>
+</div>
+<h4 class="text-xl font-bold text-white mt-auto">PROD_AWS_MAIN</h4>
+<p class="text-xs text-primary/80 font-mono truncate">postgres://admin@aws-useast-1...</p>
+</div>
+</div>
+<!-- Direction Indicator -->
+<div class="flex flex-col items-center justify-center gap-2 pt-6">
+<div class="h-[1px] w-24 bg-border-subtle relative">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50 animate-pulse"></div>
+</div>
+<div class="size-10 rounded-full border border-border-subtle bg-surface flex items-center justify-center text-text-muted">
+<span class="material-symbols-outlined">arrow_forward</span>
+</div>
+<div class="h-[1px] w-24 bg-border-subtle relative">
+<div class="absolute inset-0 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50 animate-pulse"></div>
+</div>
+</div>
+<!-- Target Dropzone -->
+<div class="flex flex-col gap-2">
+<span class="text-xs font-mono text-text-muted uppercase tracking-wider ml-1 text-right">TARGET [TO UPDATE]</span>
+<div class="h-40 border border-dashed border-text-muted/40 bg-surface/50 rounded relative flex flex-col items-center justify-center gap-3 p-5 hover:border-primary hover:bg-surface transition-all cursor-pointer group">
+<span class="material-symbols-outlined text-text-muted text-4xl group-hover:text-primary transition-colors">input</span>
+<div class="text-center">
+<p class="text-sm font-bold text-text-primary group-hover:text-white">SELECT TARGET</p>
+<p class="text-xs text-text-muted font-mono mt-1">Drag connection or click to browse</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Action Area -->
+<div class="py-6">
+<button class="group w-full h-20 border border-primary text-primary hover:bg-primary hover:text-black transition-all duration-200 relative overflow-hidden flex items-center justify-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed">
+<!-- Tech decoration corners -->
+<div class="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-primary group-hover:border-black transition-colors"></div>
+<div class="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-primary group-hover:border-black transition-colors"></div>
+<span class="material-symbols-outlined text-3xl group-hover:animate-spin">sync</span>
+<span class="text-2xl font-bold tracking-[0.2em] font-mono">INITIALIZE_DIFF()</span>
+</button>
+<div class="flex justify-between mt-2 px-1">
+<span class="text-[10px] font-mono text-text-muted">MODE: SAFE_PREVIEW</span>
+<span class="text-[10px] font-mono text-text-muted">EST. TIME: ~450ms</span>
+</div>
+</div>
+<!-- Recent Activity Log (Terminal Style) -->
+<div class="border border-border-subtle bg-black rounded overflow-hidden flex-1 flex flex-col min-h-[200px]">
+<div class="bg-surface border-b border-border-subtle px-4 py-2 flex items-center justify-between">
+<span class="text-xs font-mono text-text-muted flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">history</span>
+                            RECENT_OPERATIONS.LOG
+                         </span>
+<div class="flex gap-1.5">
+<div class="size-2 rounded-full bg-border-subtle"></div>
+<div class="size-2 rounded-full bg-border-subtle"></div>
+</div>
+</div>
+<div class="p-4 font-mono text-xs space-y-2 overflow-y-auto max-h-[240px]">
+<div class="grid grid-cols-[80px_1fr_100px] gap-4 text-text-muted/60 border-b border-border-subtle/30 pb-2 mb-2">
+<span>TIMESTAMP</span>
+<span>OPERATION</span>
+<span class="text-right">STATUS</span>
+</div>
+<div class="grid grid-cols-[80px_1fr_100px] gap-4 text-text-muted hover:bg-white/5 p-1 rounded cursor-default">
+<span class="text-primary/70">[10:42:05]</span>
+<span>SYNC: PROD_AWS -&gt; STAGING_HEROKU</span>
+<span class="text-right text-diff-add">SUCCESS (OK)</span>
+</div>
+<div class="grid grid-cols-[80px_1fr_100px] gap-4 text-text-muted hover:bg-white/5 p-1 rounded cursor-default">
+<span class="text-primary/70">[09:15:22]</span>
+<span>DIFF: PROD_AWS vs LOCAL_DEV</span>
+<span class="text-right text-text-primary">COMPLETED</span>
+</div>
+<div class="grid grid-cols-[80px_1fr_100px] gap-4 text-text-muted hover:bg-white/5 p-1 rounded cursor-default">
+<span class="text-primary/70">[08:02:10]</span>
+<span>SYNC: LEGACY -&gt; PROD_AWS</span>
+<span class="text-right text-diff-del">FAILED (ERR)</span>
+</div>
+<div class="grid grid-cols-[80px_1fr_100px] gap-4 text-text-muted hover:bg-white/5 p-1 rounded cursor-default">
+<span class="text-primary/70">[YESTERDAY]</span>
+<span>SCHEMA_DUMP: PROD_AWS</span>
+<span class="text-right text-diff-add">SAVED</span>
+</div>
+<!-- Blinking Cursor -->
+<div class="mt-4 animate-pulse text-primary font-bold">_</div>
+</div>
+</div>
+</div>
+<!-- Empty State Illustration Overlay (Hidden for active state demo, but structure included) -->
+<!-- 
+            <div class="hidden absolute inset-0 bg-background-dark/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center text-center p-10">
+                 <pre class="text-[10px] leading-[10px] font-mono text-border-subtle mb-8 select-none">
+       .           .
+     /' \         /`\
+    /   | .---.  |   \
+   |    |/  _  \|    |
+   |    |\   _  /|    |
+    \   | '---'  |   /
+     \./         \./
+                 </pre>
+                 <h2 class="text-xl font-bold text-text-primary mb-2">NO_CONFIGURATION_DETECTED</h2>
+                 <p class="text-text-muted max-w-sm">Select a Source and Target connection from the left panel to initialize a new schema comparison session.</p>
+            </div>
+            -->
+</main>
+</div>
+</body></html>

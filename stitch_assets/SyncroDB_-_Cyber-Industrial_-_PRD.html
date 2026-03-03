@@ -1,0 +1,183 @@
+# SyncroDB - Cyber-Industrial
+
+## Product Overview
+
+**The Pitch:** SyncroDB provides instant, high-fidelity schema synchronization for power users who demand precision. It visualizes the entropy between production and development databases with a raw, no-nonsense interface that treats SQL migrations as first-class code.
+
+**For:** Senior Backend Engineers, DBAs, and DevOps professionals who live in the terminal and trust data over intuition.
+
+**Device:** Desktop (Optimized for 1440px+)
+
+**Design Direction:** **Cyber-Industrial.** A brutalist, dark-mode interface reminiscent of high-end IDEs (IntelliJ, VS Code) mixed with sci-fi control panels (The Matrix, Blade Runner). Heavy use of monospaced fonts, grid lines, and high-contrast neon diff indicators against a void-like background.
+
+**Inspired by:** JetBrains DataGrip, Linear (dark mode), and CLI aesthetics.
+
+---
+
+## Screens
+
+- **Dashboard / Connection Grid:** Mission control for selecting active Source and Target databases.
+- **Schema Deep-Dive:** The primary workspace. Side-by-side tabular comparison of schema definitions with granular diffing.
+- **Safe-Sync Preview Modal:** A "final check" overlay summarizing destructive vs. additive actions before execution.
+- **Migration Script Editor:** A syntax-highlighted editor showing the generated SQL code for the proposed sync.
+
+---
+
+## Key Flows
+
+**Flow: Resolving a Type Mismatch**
+
+1. User lands on **Schema Deep-Dive** -> sees table `users` has a yellow delta icon.
+2. User selects **Columns Tab** -> identifies `email` column is `VARCHAR(255)` in Source but `TEXT` in Target.
+3. User clicks **Quick Sync** -> **Safe-Sync Preview Modal** appears summarizing the type cast.
+4. User confirms -> System executes `ALTER TABLE` and refreshes view to show state parity (no icons).
+
+---
+
+<details>
+<summary>Design System</summary>
+
+## Color Palette
+
+- **Background:** `#0D1117` - Deep Void (GitHub Dim / Terminal Black)
+- **Surface:** `#161B22` - Panel Backgrounds
+- **Border:** `#30363D` - Subtle structural dividers
+- **Text Primary:** `#E6EDF3` - High legibility white-grey
+- **Text Muted:** `#8B949E` - Metadata, labels
+- **Accent Primary:** `#00F0FF` - Cyan (Selection, Focus, Primary Actions)
+- **Diff Add (Green):** `#2EA043` - Source only (Create)
+- **Diff Mod (Yellow):** `#D29922` - Mismatch (Alter)
+- **Diff Del (Red):** `#F85149` - Target only (Drop/Warning)
+
+## Typography
+
+**Font Family:** `JetBrains Mono`, monospace. No variable width fonts allowed. This is a tool for reading code structures.
+
+- **Display:** 700, 24px (Table Names)
+- **Heading:** 500, 16px (Tab Labels, Modal Headers)
+- **Body:** 400, 13px (Table Data, SQL definitions)
+- **Micro:** 400, 11px (Badges, Tooltips)
+
+**Style Notes:**
+- **Raw Borders:** 1px solid borders everywhere. No shadows, no gradients.
+- **Scanlines:** Subtle 1px grid overlay on empty states.
+- **Data Density:** Tight leading (1.2), minimal padding. Designed for information density.
+
+## Design Tokens
+
+```css
+:root {
+  --bg-void: #0D1117;
+  --bg-panel: #161B22;
+  --border-subtle: #30363D;
+  --text-primary: #E6EDF3;
+  --text-muted: #8B949E;
+  --cyan-neon: #00F0FF;
+  --diff-add: #2EA043;
+  --diff-mod: #D29922;
+  --diff-del: #F85149;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius-xs: 2px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+}
+```
+
+</details>
+
+---
+
+<details>
+<summary>Screen Specifications</summary>
+
+### 1. Dashboard / Connection Grid
+
+**Purpose:** Select which two databases to compare.
+
+**Layout:** Split screen. Left panel: Saved Connections. Right panel: Active Comparison configuration.
+
+**Key Elements:**
+- **Connection Cards:** `#161B22` bg, display `postgres://production` vs `postgres://local`. Status dot (Green/Red).
+- **Compare Button:** Large, full-width button. Cyan border `#00F0FF`. Text: `INITIALIZE_DIFF()`.
+- **Recent Syncs:** List of last 5 operations with timestamps.
+
+**States:**
+- **Empty:** "No Connections Configured" in center, monospaced ASCII art icon.
+
+### 2. Schema Deep-Dive (Key Screen)
+
+**Purpose:** The main workspace for analyzing and fixing schema drift.
+
+**Layout:**
+- **Header (48px):** Fixed top bar.
+- **Sidebar (240px):** Tree view of all tables in the schema.
+- **Main Area:** Tabbed interface for the selected table.
+
+**Key Elements:**
+- **Header:**
+  - **Breadcrumb:** `public` / `users` (H1, 24px).
+  - **Action Group (Right):**
+    - `Quick Sync` (Solid Cyan Button, Black Text).
+    - `Export Script` (Outlined Button).
+- **Tabs:** `Columns`, `Indexes`, `Constraints`. Active tab has 2px Cyan bottom border.
+- **Table View (Columns Tab):**
+  - **Header Row:** `STATUS`, `COLUMN`, `SOURCE (PROD)`, `TARGET (DEV)`.
+  - **Rows:** Alternating `#161B22` / `#0D1117`.
+  - **Diff Cell:**
+    - If mismatch: Background `#D29922` (10% opacity), Text `#D29922`.
+    - Format: `VARCHAR(50)` -> `TEXT`.
+    - Icon: `⚠` (Delta).
+
+**Interactions:**
+- **Hover Row:** Highlight row `#30363D`. Show "Fix" button on far right.
+- **Click Diff Icon:** Opens specific context menu for that diff (e.g., "Ignore", "Sync this property only").
+
+**States:**
+- **Synchronized:** Large green checkmark centered. "NO ENTROPY DETECTED".
+- **Loading:** Scanning progress bar (Cyan) spanning full width of header.
+
+### 3. Safe-Sync Preview Modal
+
+**Purpose:** Gatekeeper before destructive actions.
+
+**Layout:** Centered modal, 600px width. Backdrop blur.
+
+**Key Elements:**
+- **Header:** `CONFIRM_TRANSACTION` (Red if destructive, Cyan if safe).
+- **Summary List:**
+  - `[+] ADD COLUMN` (Green text): `created_at`
+  - `[~] ALTER COLUMN` (Yellow text): `bio` type `VARCHAR` -> `TEXT`
+  - `[-] DROP INDEX` (Red text): `idx_user_email_old`
+- **SQL Preview:** Collapsible section showing the exact DDL statements.
+- **Footer:** `CANCEL` (Ghost) vs `EXECUTE` (Solid).
+
+### 4. Migration Script Editor
+
+**Purpose:** View and edit generated SQL before running or saving.
+
+**Layout:** Full screen code editor view.
+
+**Key Elements:**
+- **Line Numbers:** `#8B949E`, right-aligned.
+- **Syntax Highlighting:** SQL keywords in Cyan, Strings in Green, Comments in Grey.
+- **Toolbar:** `Copy to Clipboard`, `Save .sql File`, `Run Query`.
+
+**Responsive:**
+- **Desktop Only:** Minimum width 1024px. Below that, show "TERMINAL WIDTH INSUFFICIENT" warning.
+
+</details>
+
+---
+
+<details>
+<summary>Build Guide</summary>
+
+**Stack:** Electron (or Web), React, Tailwind CSS v3.
+
+**Build Order:**
+1. **Schema Deep-Dive (Columns Tab):** This is the core value prop. Get the side-by-side diff rendering logic working first. Focus on the grid layout and monospaced typography rendering.
+2. **Safe-Sync Modal:** Critical for user trust. Implement the summary logic and visual warnings.
+3. **Dashboard:** Needed for navigation but simpler implementation.
+4. **Indexes/Constraints Tabs:** Extensions of the column logic.
+
+</details>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SyncroDB - JSON Config Editor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df2e3",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0D1117",
+                        "panel": "#161B22",
+                        "border-muted": "#30363D",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .grid-bg {
+            background-image: radial-gradient(circle at 1px 1px, #30363D 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        .syntax-key { color: #0df2e3; }
+        .syntax-string { color: #7ee787; }
+        .syntax-number { color: #ffa657; }
+        .syntax-bracket { color: #d1d5db; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col overflow-hidden">
+<header class="h-14 border-b border-border-muted bg-panel flex items-center justify-between px-4 z-10">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<div class="size-6 bg-primary flex items-center justify-center rounded-sm">
+<span class="material-symbols-outlined text-background-dark text-lg font-bold">database</span>
+</div>
+<h1 class="text-lg font-bold tracking-tight uppercase">SyncroDB</h1>
+</div>
+<div class="h-6 w-px bg-border-muted mx-2"></div>
+<div class="flex items-center gap-2 text-sm text-slate-400">
+<span class="material-symbols-outlined text-sm">description</span>
+<span class="font-mono">connections.config.json</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-border-muted hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-sm">upload_file</span>
+                Import File
+            </button>
+<button class="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-border-muted hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-sm">spellcheck</span>
+                Validate JSON
+            </button>
+<button class="flex items-center gap-2 px-4 py-1.5 text-xs font-bold uppercase tracking-wider bg-primary text-background-dark hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-sm">save</span>
+                Save Config
+            </button>
+<div class="h-8 w-8 rounded-full border border-primary/50 p-0.5 ml-2 overflow-hidden">
+<img class="w-full h-full object-cover rounded-full" data-alt="User profile avatar abstract pattern" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASw6h8IZynBvb6Hxz1ueKwyUvmEp1SlzxshIP72IyNdpiWv2tlDElHhOhkn6OA2Urky2tnYAOCnd0PUOysdPqij6jXm4FkTATH9y0UZrW_nxTWmTE6dzX1zUbRbhpMTP-YFGzDSWihwK-8TMw_xdtTOh43GX4hxazl4rip-K_foP1pX_XwQ5nPpgSe7r86cnyXOj4MtH322ddWFmD_aOjnD54jkphqSHq7lORo_Q88z_IlM7ubz6R4LBGpqZWRi-L9dH_gKjyAYlLn"/>
+</div>
+</div>
+</header>
+<main class="flex-1 flex overflow-hidden">
+<aside class="w-16 border-r border-border-muted bg-panel flex flex-col items-center py-4 gap-6">
+<button class="text-primary hover:bg-primary/10 p-2 rounded transition-colors" title="Explorer">
+<span class="material-symbols-outlined">folder_open</span>
+</button>
+<button class="text-slate-500 hover:text-primary p-2 rounded transition-colors" title="Search">
+<span class="material-symbols-outlined">search</span>
+</button>
+<button class="text-slate-500 hover:text-primary p-2 rounded transition-colors" title="Git">
+<span class="material-symbols-outlined">account_tree</span>
+</button>
+<button class="text-slate-500 hover:text-primary p-2 rounded transition-colors" title="Extensions">
+<span class="material-symbols-outlined">extension</span>
+</button>
+<div class="mt-auto flex flex-col gap-6">
+<button class="text-slate-500 hover:text-primary p-2 rounded transition-colors" title="Settings">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</aside>
+<section class="flex-1 flex flex-col bg-background-dark relative">
+<div class="absolute inset-0 grid-bg opacity-10 pointer-events-none"></div>
+<div class="flex-1 overflow-auto font-mono text-sm leading-relaxed p-6 relative z-0">
+<div class="flex">
+<div class="w-10 flex flex-col text-slate-600 text-right pr-4 select-none">
+<span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+<span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span><span>17</span><span>18</span><span>19</span><span>20</span>
+<span>21</span><span>22</span><span>23</span><span>24</span><span>25</span>
+</div>
+<div class="flex-1">
+<span class="syntax-bracket">{</span><br/>
+                          <span class="syntax-key">"version"</span>: <span class="syntax-string">"2.0.4-industrial"</span>,<br/>
+                          <span class="syntax-key">"connections"</span>: <span class="syntax-bracket">[</span><br/>
+                            <span class="syntax-bracket">{</span><br/>
+                              <span class="syntax-key">"name"</span>: <span class="syntax-string">"Production_Main_DB"</span>,<br/>
+                              <span class="syntax-key">"url"</span>: <span class="syntax-string">"postgresql://internal.syncro.io:5432/main"</span>,<br/>
+                              <span class="syntax-key">"type"</span>: <span class="syntax-string">"PostgreSQL"</span>,<br/>
+                              <span class="syntax-key">"status"</span>: <span class="syntax-string">"active"</span>,<br/>
+                              <span class="syntax-key">"latency_threshold"</span>: <span class="syntax-number">150</span><br/>
+                            <span class="syntax-bracket">}</span>,<br/>
+                            <span class="syntax-bracket">{</span><br/>
+                              <span class="syntax-key">"name"</span>: <span class="syntax-string">"Sensor_Telemetry_Node"</span>,<br/>
+                              <span class="syntax-key">"url"</span>: <span class="syntax-string">"mongodb://node-01.telemetry.local:27017"</span>,<br/>
+                              <span class="syntax-key">"type"</span>: <span class="syntax-string">"MongoDB"</span>,<br/>
+                              <span class="syntax-key">"status"</span>: <span class="syntax-string">"active"</span><br/>
+                            <span class="syntax-bracket">}</span><br/>
+                          <span class="syntax-bracket">]</span>,<br/>
+                          <span class="syntax-key">"sources"</span>: <span class="syntax-bracket">{</span><br/>
+                            <span class="syntax-key">"active_count"</span>: <span class="syntax-number">42</span>,<br/>
+                            <span class="syntax-key">"sync_interval"</span>: <span class="syntax-number">10</span>,<br/>
+                            <span class="syntax-key">"protocols"</span>: <span class="syntax-bracket">[</span><span class="syntax-string">"MQTT"</span>, <span class="syntax-string">"OPC-UA"</span>, <span class="syntax-string">"HTTPS"</span><span class="syntax-bracket">]</span><br/>
+                          <span class="syntax-bracket">}</span>,<br/>
+                          <span class="syntax-key">"targets"</span>: <span class="syntax-bracket">{</span><br/>
+                            <span class="syntax-key">"warehouse"</span>: <span class="syntax-string">"BigQuery"</span>,<br/>
+                            <span class="syntax-key">"encryption"</span>: <span class="syntax-string">"AES-256-GCM"</span><br/>
+                          <span class="syntax-bracket">}</span><br/>
+<span class="syntax-bracket">}</span>
+</div>
+</div>
+</div>
+<footer class="h-8 bg-panel border-t border-border-muted flex items-center px-4 justify-between text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+<div class="flex gap-4">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">code</span> JSON</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">history</span> Sync Stable</span>
+</div>
+<div class="flex gap-4">
+<span>UTF-8</span>
+<span>Line 25, Col 2</span>
+</div>
+</footer>
+</section>
+<aside class="w-80 border-l border-border-muted bg-panel flex flex-col">
+<div class="p-4 border-b border-border-muted">
+<h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">System Status</h3>
+<div class="space-y-4">
+<div class="bg-background-dark p-4 border border-border-muted rounded-lg">
+<div class="flex items-center justify-between mb-1">
+<p class="text-xs font-bold uppercase text-slate-500">JSON Validation</p>
+<span class="material-symbols-outlined text-primary text-sm">check_circle</span>
+</div>
+<p class="text-primary font-mono text-sm">VALID</p>
+<div class="w-full bg-slate-800 h-1 mt-3 overflow-hidden">
+<div class="bg-primary h-full w-full"></div>
+</div>
+</div>
+<div class="bg-background-dark p-4 border border-border-muted rounded-lg">
+<p class="text-xs font-bold uppercase text-slate-500 mb-1">Last Deployment</p>
+<p class="text-slate-300 font-mono text-xs">2023-10-24 14:32:01</p>
+</div>
+<div class="bg-background-dark p-4 border border-border-muted rounded-lg">
+<p class="text-xs font-bold uppercase text-slate-500 mb-2">Connection Health</p>
+<div class="space-y-2">
+<div class="flex justify-between items-center text-[10px]">
+<span class="text-slate-400">Main_DB</span>
+<span class="text-primary">99.9%</span>
+</div>
+<div class="w-full bg-slate-800 h-1">
+<div class="bg-primary h-full w-[99.9%]"></div>
+</div>
+<div class="flex justify-between items-center text-[10px]">
+<span class="text-slate-400">Node_01</span>
+<span class="text-primary">94.2%</span>
+</div>
+<div class="w-full bg-slate-800 h-1">
+<div class="bg-primary h-full w-[94.2%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="p-4 flex-1">
+<h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Quick Documentation</h3>
+<div class="text-[11px] text-slate-400 space-y-3 leading-relaxed">
+<p><strong class="text-primary">name:</strong> String identifying the connection in the dashboard.</p>
+<p><strong class="text-primary">url:</strong> Valid connection string URI for the target DB.</p>
+<p><strong class="text-primary">type:</strong> Supported: PostgreSQL, MongoDB, Redis, InfluxDB.</p>
+</div>
+</div>
+<div class="p-4 bg-primary/5 border-t border-primary/20">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary">info</span>
+<div>
+<p class="text-[11px] font-bold text-primary uppercase">Pro-Tip</p>
+<p class="text-[10px] text-slate-400 mt-1">Use 'Validate JSON' before saving to prevent industrial sync failures.</p>
+</div>
+</div>
+</div>
+</aside>
+</main>
+</body></html>

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const API_KEY = "";
+const API_KEY = process.env.STITCH_API_KEY; // Replace with your actual key or use .env file
 const PROJECT_ID = "16266398012239050806";
 const SCREENS = [
   "2489cef2db7a4792842201db32401ac6",

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SyncroDB - Schema Deep-Dive</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df2e3", // Mapped to the requested cyan-neon from design system description, but using the provided hex for primary
+                        "void": "#0D1117",
+                        "panel": "#161B22",
+                        "border-subtle": "#30363D",
+                        "text-primary": "#E6EDF3",
+                        "text-muted": "#8B949E",
+                        "diff-add": "#2EA043",
+                        "diff-mod": "#D29922",
+                        "diff-del": "#F85149",
+                        "background-light": "#f5f8f8", // Kept from config requirements
+                        "background-dark": "#0D1117", // Overridden to match void
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "2px", "sm": "2px", "lg": "4px", "xl": "8px", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #0D1117;
+            color: #E6EDF3;
+        }
+        
+        .font-mono-data {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Scrollbar styling for a cyber-industrial look */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D1117; 
+            border-left: 1px solid #30363D;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363D; 
+            border: 2px solid #0D1117;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0df2e3; 
+        }
+
+        .scanline-bg {
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 1px,
+                #161B22 1px,
+                #161B22 2px
+            );
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden bg-void text-text-primary selection:bg-primary selection:text-void">
+<!-- Header -->
+<header class="h-12 border-b border-border-subtle bg-panel flex items-center justify-between px-4 shrink-0 z-20">
+<!-- Left: Logo & Breadcrumbs -->
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-[20px]">dataset</span>
+<span class="font-bold tracking-tight text-lg">SyncroDB</span>
+</div>
+<div class="h-4 w-[1px] bg-border-subtle"></div>
+<div class="flex items-center gap-2 text-sm text-text-muted font-mono-data">
+<span class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-diff-add"></span>
+                    PROD
+                </span>
+<span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+<span class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-diff-mod"></span>
+                    DEV
+                </span>
+<span class="text-border-subtle">/</span>
+<span class="text-text-primary font-bold">public</span>
+<span class="text-border-subtle">/</span>
+<span class="text-text-primary font-bold">users</span>
+</div>
+</div>
+<!-- Right: Actions -->
+<div class="flex items-center gap-3">
+<div class="flex items-center px-3 py-1 bg-void border border-border-subtle rounded text-xs text-text-muted font-mono-data">
+<span class="material-symbols-outlined text-[14px] mr-2 text-diff-mod">warning</span>
+                3 MISMATCHES DETECTED
+            </div>
+<button class="h-8 px-4 flex items-center justify-center border border-border-subtle text-primary hover:bg-primary/10 transition-colors text-xs font-bold uppercase tracking-wide rounded">
+                Export Script
+            </button>
+<button class="h-8 px-4 flex items-center justify-center bg-primary hover:bg-primary/90 text-void transition-colors text-xs font-bold uppercase tracking-wide rounded shadow-[0_0_10px_rgba(13,242,227,0.2)]">
+<span class="material-symbols-outlined text-[16px] mr-2">bolt</span>
+                Quick Sync
+            </button>
+</div>
+</header>
+<!-- Main Workspace -->
+<div class="flex flex-1 overflow-hidden">
+<!-- Sidebar -->
+<aside class="w-60 bg-panel border-r border-border-subtle flex flex-col shrink-0">
+<!-- Sidebar Header -->
+<div class="h-10 border-b border-border-subtle flex items-center px-3 justify-between bg-panel">
+<span class="text-xs font-bold text-text-muted tracking-widest uppercase">Tables (24)</span>
+<button class="text-text-muted hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+</button>
+</div>
+<!-- Table List -->
+<div class="flex-1 overflow-y-auto font-mono-data text-sm py-2">
+<!-- Item: Active/Selected -->
+<div class="group flex items-center justify-between px-3 py-1.5 bg-primary/10 border-l-2 border-primary cursor-pointer">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-[16px]">table_chart</span>
+<span>users</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-diff-mod">warning</span>
+</div>
+<!-- Item: Normal -->
+<div class="group flex items-center justify-between px-3 py-1.5 text-text-muted hover:text-text-primary hover:bg-white/5 border-l-2 border-transparent cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">table_chart</span>
+<span>orders</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-diff-add opacity-0 group-hover:opacity-100">check_circle</span>
+</div>
+<!-- Item: Mismatch -->
+<div class="group flex items-center justify-between px-3 py-1.5 text-text-muted hover:text-text-primary hover:bg-white/5 border-l-2 border-transparent cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">table_chart</span>
+<span>products</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-diff-mod">warning</span>
+</div>
+<!-- Item: Normal -->
+<div class="group flex items-center justify-between px-3 py-1.5 text-text-muted hover:text-text-primary hover:bg-white/5 border-l-2 border-transparent cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">table_chart</span>
+<span>inventory_logs</span>
+</div>
+</div>
+<!-- Item: Missing in Target -->
+<div class="group flex items-center justify-between px-3 py-1.5 text-text-muted hover:text-text-primary hover:bg-white/5 border-l-2 border-transparent cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">table_chart</span>
+<span>audit_trail</span>
+</div>
+<span class="material-symbols-outlined text-[14px] text-diff-add">add_circle</span>
+</div>
+<!-- Item: Normal -->
+<div class="group flex items-center justify-between px-3 py-1.5 text-text-muted hover:text-text-primary hover:bg-white/5 border-l-2 border-transparent cursor-pointer">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">table_chart</span>
+<span>sessions</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Content Area -->
+<main class="flex-1 flex flex-col min-w-0 bg-void relative">
+<!-- Context Tabs -->
+<div class="h-12 border-b border-border-subtle flex items-end px-6 bg-void/50 backdrop-blur-sm sticky top-0 z-10">
+<button class="px-4 py-2.5 text-sm font-medium text-primary border-b-2 border-primary hover:bg-primary/5 transition-colors">
+                    Columns
+                </button>
+<button class="px-4 py-2.5 text-sm font-medium text-text-muted border-b-2 border-transparent hover:text-text-primary hover:bg-white/5 transition-colors">
+                    Indexes <span class="ml-1 text-[10px] bg-border-subtle px-1.5 rounded-full text-text-primary">2</span>
+</button>
+<button class="px-4 py-2.5 text-sm font-medium text-text-muted border-b-2 border-transparent hover:text-text-primary hover:bg-white/5 transition-colors">
+                    Constraints
+                </button>
+<button class="px-4 py-2.5 text-sm font-medium text-text-muted border-b-2 border-transparent hover:text-text-primary hover:bg-white/5 transition-colors">
+                    Triggers
+                </button>
+</div>
+<!-- Data Grid -->
+<div class="flex-1 overflow-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-panel sticky top-0 z-10 shadow-sm border-b border-border-subtle">
+<tr>
+<th class="py-2 pl-6 pr-4 w-12 text-xs font-mono-data text-text-muted font-medium border-r border-border-subtle">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+</th>
+<th class="py-2 px-4 text-xs font-mono-data text-text-muted font-medium border-r border-border-subtle uppercase tracking-wider">Column Name</th>
+<th class="py-2 px-4 text-xs font-mono-data text-text-muted font-medium border-r border-border-subtle uppercase tracking-wider">Source Type (Prod)</th>
+<th class="py-2 px-4 text-xs font-mono-data text-text-muted font-medium border-r border-border-subtle uppercase tracking-wider">Target Type (Dev)</th>
+<th class="py-2 px-4 text-xs font-mono-data text-text-muted font-medium uppercase tracking-wider w-32">Actions</th>
+</tr>
+</thead>
+<tbody class="font-mono-data text-sm">
+<!-- Row 1: Match -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-panel">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center">
+<span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">id</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">UUID</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">UUID</td>
+<td class="py-2 px-4"></td>
+</tr>
+<!-- Row 2: Mismatch -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-void">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center bg-diff-mod/5 relative">
+<div class="absolute left-0 top-0 bottom-0 w-[2px] bg-diff-mod"></div>
+<span class="material-symbols-outlined text-[16px] text-diff-mod">warning</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-bold">email</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary">VARCHAR(255)</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-diff-mod bg-diff-mod/10 font-bold">TEXT</td>
+<td class="py-2 px-4">
+<button class="opacity-0 group-hover:opacity-100 px-2 py-1 bg-diff-mod/20 text-diff-mod hover:bg-diff-mod hover:text-void text-xs uppercase font-bold rounded transition-all">
+                                    Fix
+                                </button>
+</td>
+</tr>
+<!-- Row 3: Match -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-panel">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center">
+<span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">first_name</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">VARCHAR(100)</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">VARCHAR(100)</td>
+<td class="py-2 px-4"></td>
+</tr>
+<!-- Row 4: Match -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-void">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center">
+<span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">last_name</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">VARCHAR(100)</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">VARCHAR(100)</td>
+<td class="py-2 px-4"></td>
+</tr>
+<!-- Row 5: Missing in Target -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-panel">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center bg-diff-add/5 relative">
+<div class="absolute left-0 top-0 bottom-0 w-[2px] bg-diff-add"></div>
+<span class="material-symbols-outlined text-[16px] text-diff-add">add_circle</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-diff-add font-bold">created_at</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-diff-add">TIMESTAMP</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted opacity-30 italic">NULL</td>
+<td class="py-2 px-4">
+<button class="opacity-0 group-hover:opacity-100 px-2 py-1 bg-diff-add/20 text-diff-add hover:bg-diff-add hover:text-white text-xs uppercase font-bold rounded transition-all">
+                                    Create
+                                </button>
+</td>
+</tr>
+<!-- Row 6: Mismatch -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-void">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center bg-diff-mod/5 relative">
+<div class="absolute left-0 top-0 bottom-0 w-[2px] bg-diff-mod"></div>
+<span class="material-symbols-outlined text-[16px] text-diff-mod">warning</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-bold">role</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary">ENUM('user','admin')</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-diff-mod bg-diff-mod/10 font-bold">VARCHAR(50)</td>
+<td class="py-2 px-4">
+<button class="opacity-0 group-hover:opacity-100 px-2 py-1 bg-diff-mod/20 text-diff-mod hover:bg-diff-mod hover:text-void text-xs uppercase font-bold rounded transition-all">
+                                    Fix
+                                </button>
+</td>
+</tr>
+<!-- Row 7: Match -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-panel">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center">
+<span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">settings</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">JSONB</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">JSONB</td>
+<td class="py-2 px-4"></td>
+</tr>
+<!-- Row 8: Missing in Source (Delete warning) -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-void">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center bg-diff-del/5 relative">
+<div class="absolute left-0 top-0 bottom-0 w-[2px] bg-diff-del"></div>
+<span class="material-symbols-outlined text-[16px] text-diff-del">delete</span>
+</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-diff-del font-bold line-through decoration-diff-del">legacy_id</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted opacity-30 italic">NULL</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-diff-del">INTEGER</td>
+<td class="py-2 px-4">
+<button class="opacity-0 group-hover:opacity-100 px-2 py-1 bg-diff-del/20 text-diff-del hover:bg-diff-del hover:text-white text-xs uppercase font-bold rounded transition-all">
+                                    Drop
+                                </button>
+</td>
+</tr>
+<!-- Filler rows for density feel -->
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-panel">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center"><span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span></td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">avatar_url</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">TEXT</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">TEXT</td>
+<td class="py-2 px-4"></td>
+</tr>
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-void">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center"><span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span></td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">is_verified</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">BOOLEAN</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">BOOLEAN</td>
+<td class="py-2 px-4"></td>
+</tr>
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-panel">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center"><span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span></td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">phone</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">VARCHAR(20)</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">VARCHAR(20)</td>
+<td class="py-2 px-4"></td>
+</tr>
+<tr class="group border-b border-border-subtle/20 hover:bg-border-subtle/20 bg-void">
+<td class="py-2 pl-6 pr-4 border-r border-border-subtle/20 text-center"><span class="material-symbols-outlined text-[16px] text-diff-add opacity-50">check_circle</span></td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-primary font-medium">country_code</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">CHAR(2)</td>
+<td class="py-2 px-4 border-r border-border-subtle/20 text-text-muted">CHAR(2)</td>
+<td class="py-2 px-4"></td>
+</tr>
+</tbody>
+</table>
+<!-- Bottom spacing/padding for scroll -->
+<div class="h-20 w-full"></div>
+</div>
+<!-- Empty State Visualization (Hidden but structured for expansion) -->
+<!-- 
+            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-0">
+                <div class="text-primary/20">
+                    <pre class="font-mono text-xs leading-tight">
+       .---.
+      /     \
+      |  O  | NO ENTROPY
+      \     / DETECTED
+       '---'
+                    </pre>
+                </div>
+            </div> 
+            -->
+</main>
+</div>
+<!-- Status Bar (Optional Cyber Detail) -->
+<div class="h-6 bg-void border-t border-border-subtle flex items-center justify-between px-4 text-[10px] text-text-muted font-mono-data uppercase tracking-wider shrink-0">
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span> Connected: 12ms</span>
+<span>Schema: PostgreSQL 14.5</span>
+</div>
+<div>
+<span>Ln 12, Col 4</span>
+</div>
+</div>
+</body></html>

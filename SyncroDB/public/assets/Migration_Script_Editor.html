@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SyncroDB - Migration Script Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df2e3", // Cyan Neon
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0D1117", // Deep Void from PRD
+                        "surface-dark": "#161B22", // Panel Background
+                        "border-subtle": "#30363D",
+                        "diff-add": "#2EA043",
+                        "diff-mod": "#D29922",
+                        "diff-del": "#F85149",
+                        "text-muted": "#8B949E",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "2px", "lg": "4px", "xl": "6px", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Scrollbar for Cyber-Industrial look */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D1117; 
+            border-left: 1px solid #30363D;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363D; 
+            border: 2px solid #0D1117;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #464e59; 
+        }
+
+        /* Syntax Highlighting Base Classes */
+        .token-keyword { color: #0df2e3; }
+        .token-string { color: #2EA043; }
+        .token-comment { color: #8B949E; font-style: italic; }
+        .token-function { color: #D29922; }
+        .token-operator { color: #E6EDF3; }
+        .token-number { color: #79c0ff; }
+
+        /* Line Numbers Counter */
+        .line-numbers {
+            counter-reset: line;
+        }
+        .line-number::before {
+            counter-increment: line;
+            content: counter(line);
+            display: inline-block;
+            width: 100%;
+            text-align: right;
+            padding-right: 1.5rem;
+            color: #484f58;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-[#E6EDF3] h-screen w-screen overflow-hidden flex flex-col font-display antialiased selection:bg-primary/20 selection:text-primary">
+<!-- Mobile/Small Screen Warning Overlay -->
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md lg:hidden p-8 text-center">
+<div class="border border-diff-del/50 bg-[#161B22] p-8 rounded shadow-[0_0_30px_rgba(248,81,73,0.2)] max-w-md">
+<span class="material-symbols-outlined text-diff-del text-6xl mb-4">warning</span>
+<h2 class="text-2xl font-bold text-diff-del mb-2 tracking-tight">TERMINAL WIDTH INSUFFICIENT</h2>
+<p class="text-text-muted font-mono text-sm">This interface requires a minimum viewport width of 1024px. Please expand your window or switch to a desktop device.</p>
+</div>
+</div>
+<!-- Top Navigation (Reused & Adapted) -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-border-subtle bg-surface-dark px-6 py-3 shrink-0 h-16">
+<div class="flex items-center gap-4">
+<div class="size-6 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<h2 class="text-[#E6EDF3] text-lg font-bold leading-tight tracking-tight uppercase">SyncroDB <span class="text-text-muted font-normal text-sm normal-case ml-2">// Editor</span></h2>
+</div>
+<!-- Breadcrumbs / File Info -->
+<div class="hidden md:flex items-center gap-2 px-4 py-1 bg-[#0D1117] border border-border-subtle rounded text-sm font-mono text-text-muted">
+<span class="text-primary">migrations</span>
+<span class="text-border-subtle">/</span>
+<span>20231027_alter_users_schema.sql</span>
+<span class="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-border-subtle/30 text-text-muted border border-border-subtle">READ-ONLY</span>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-2">
+<button class="group flex items-center justify-center overflow-hidden rounded border border-border-subtle bg-surface-dark hover:bg-border-subtle/30 text-[#E6EDF3] h-9 px-3 gap-2 text-xs font-bold transition-all">
+<span class="material-symbols-outlined text-base group-hover:text-primary">content_copy</span>
+<span>Copy</span>
+</button>
+<button class="group flex items-center justify-center overflow-hidden rounded border border-border-subtle bg-surface-dark hover:bg-border-subtle/30 text-[#E6EDF3] h-9 px-3 gap-2 text-xs font-bold transition-all">
+<span class="material-symbols-outlined text-base group-hover:text-primary">save</span>
+<span>Save .sql</span>
+</button>
+<button class="flex items-center justify-center overflow-hidden rounded border border-primary/50 hover:border-primary bg-primary/10 hover:bg-primary/20 text-primary h-9 px-4 gap-2 text-xs font-bold shadow-[0_0_10px_rgba(13,242,227,0.1)] hover:shadow-[0_0_15px_rgba(13,242,227,0.2)] transition-all">
+<span class="material-symbols-outlined text-base">play_arrow</span>
+<span>RUN QUERY</span>
+</button>
+</div>
+<!-- User Profile / Settings -->
+<div class="h-8 w-8 rounded bg-border-subtle flex items-center justify-center text-text-muted cursor-pointer hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm">settings</span>
+</div>
+</div>
+</header>
+<!-- Main Editor Layout -->
+<div class="flex flex-1 overflow-hidden">
+<!-- Sidebar: Explorer (Collapsed state for focus on editor) -->
+<aside class="w-12 border-r border-border-subtle bg-surface-dark flex flex-col items-center py-4 gap-4 shrink-0">
+<button class="p-2 text-text-muted hover:text-white rounded hover:bg-border-subtle/50 tooltip-trigger">
+<span class="material-symbols-outlined">folder_open</span>
+</button>
+<button class="p-2 text-primary bg-primary/10 rounded border border-primary/20 tooltip-trigger">
+<span class="material-symbols-outlined">code</span>
+</button>
+<button class="p-2 text-text-muted hover:text-white rounded hover:bg-border-subtle/50 tooltip-trigger">
+<span class="material-symbols-outlined">history</span>
+</button>
+<div class="mt-auto p-2 text-text-muted hover:text-white rounded hover:bg-border-subtle/50">
+<span class="material-symbols-outlined">keyboard_command_key</span>
+</div>
+</aside>
+<!-- Editor Area -->
+<main class="flex-1 flex flex-col min-w-0 bg-[#0D1117] relative">
+<!-- Editor Tabs -->
+<div class="flex h-9 border-b border-border-subtle bg-[#0D1117] select-none">
+<div class="flex items-center px-4 border-r border-t border-t-primary border-r-border-subtle bg-surface-dark text-xs font-mono text-[#E6EDF3] gap-2 min-w-[200px]">
+<span class="material-symbols-outlined text-primary text-sm">description</span>
+                    20231027_alter_users.sql
+                    <span class="ml-auto material-symbols-outlined text-text-muted hover:text-white cursor-pointer text-sm">close</span>
+</div>
+<div class="flex items-center px-4 border-r border-transparent border-t border-t-transparent bg-transparent text-xs font-mono text-text-muted gap-2 hover:bg-surface-dark/50 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-sm">description</span>
+                    rollback_users.sql
+                </div>
+</div>
+<!-- Code Surface -->
+<div class="flex-1 flex overflow-auto font-mono text-[13px] leading-[1.6]">
+<!-- Gutter (Line Numbers) -->
+<div class="w-16 py-4 bg-[#0D1117] border-r border-border-subtle text-right shrink-0 select-none line-numbers flex flex-col text-[#484f58]">
+<!-- Generated lines -->
+<span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span>
+<span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span>
+<span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span>
+<span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span>
+<span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span><span class="line-number"></span>
+</div>
+<!-- Code Content -->
+<div class="p-4 outline-none min-w-[800px]">
+<div class="whitespace-pre">
+<span class="token-comment">-- SyncroDB Migration Script</span>
+<span class="token-comment">-- Generated: 2023-10-27 14:32:01 UTC</span>
+<span class="token-comment">-- Source: postgres://production (v15.3)</span>
+<span class="token-comment">-- Target: postgres://local_dev (v14.1)</span>
+<span class="token-keyword">BEGIN TRANSACTION</span><span class="token-operator">;</span>
+<span class="token-comment">-- [1] Alter Type Mismatch in 'users' table</span>
+<span class="token-comment">-- SAFETY CHECK: Data truncation may occur if values exceed 255 chars</span>
+<span class="token-keyword">ALTER TABLE</span> public<span class="token-operator">.</span>users 
+    <span class="token-keyword">ALTER COLUMN</span> email <span class="token-keyword">TYPE</span> <span class="token-keyword">VARCHAR</span><span class="token-operator">(</span><span class="token-number">255</span><span class="token-operator">)</span>
+<span class="token-keyword">USING</span> email<span class="token-operator">::</span><span class="token-keyword">VARCHAR</span><span class="token-operator">(</span><span class="token-number">255</span><span class="token-operator">)</span><span class="token-operator">;</span>
+<span class="token-comment">-- [2] Add Missing Column</span>
+<span class="token-keyword">ALTER TABLE</span> public<span class="token-operator">.</span>users 
+    <span class="token-keyword">ADD COLUMN</span> last_login_at <span class="token-keyword">TIMESTAMP WITH TIME ZONE DEFAULT NOW</span><span class="token-operator">()</span><span class="token-operator">;</span>
+<span class="token-comment">-- [3] Create Missing Index</span>
+<span class="token-keyword">CREATE INDEX CONCURRENTLY</span> idx_users_email_lower 
+    <span class="token-keyword">ON</span> public<span class="token-operator">.</span>users <span class="token-operator">(</span><span class="token-function">lower</span><span class="token-operator">(</span>email<span class="token-operator">)</span><span class="token-operator">)</span><span class="token-operator">;</span>
+<span class="token-comment">-- [4] Drop Deprecated Constraint (Diff-Del Warning)</span>
+<span class="token-comment">-- WARNING: This constraint exists in Target but not in Source.</span>
+<span class="token-keyword">ALTER TABLE</span> public<span class="token-operator">.</span>orders 
+    <span class="token-keyword">DROP CONSTRAINT</span> IF EXISTS orders_temp_check<span class="token-operator">;</span>
+<span class="token-comment">-- [5] Update View Definition</span>
+<span class="token-keyword">CREATE OR REPLACE VIEW</span> public<span class="token-operator">.</span>active_users_v <span class="token-keyword">AS</span>
+<span class="token-keyword">SELECT</span> id<span class="token-operator">,</span> email<span class="token-operator">,</span> created_at 
+    <span class="token-keyword">FROM</span> public<span class="token-operator">.</span>users 
+    <span class="token-keyword">WHERE</span> deleted_at <span class="token-keyword">IS NULL</span>
+<span class="token-keyword">AND</span> last_login_at <span class="token-operator">&gt;</span> <span class="token-function">NOW</span><span class="token-operator">()</span> - <span class="token-keyword">INTERVAL</span> <span class="token-string">'30 days'</span><span class="token-operator">;</span>
+<span class="token-keyword">COMMIT</span><span class="token-operator">;</span>
+</div>
+<!-- Blinking Cursor -->
+<div class="inline-block w-[10px] h-[1.2em] bg-primary align-middle animate-pulse ml-1"></div>
+</div>
+</div>
+<!-- Footer / Status Bar -->
+<footer class="h-8 bg-surface-dark border-t border-border-subtle flex items-center justify-between px-4 text-[11px] font-mono text-text-muted shrink-0 select-none">
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-primary">link</span>
+<span class="text-[#E6EDF3]">Connected:</span> postgres://local_dev
+                    </div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">database</span>
+<span>schema: public</span>
+</div>
+<div class="hidden sm:flex items-center gap-2">
+<span class="size-2 rounded-full bg-diff-add"></span>
+<span>Ready to Apply</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div>Ln 24, Col 8</div>
+<div>UTF-8</div>
+<div>PostgreSQL</div>
+<div class="flex items-center gap-1 text-primary">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>READ-ONLY</span>
+</div>
+</div>
+</footer>
+<!-- Background Grid Pattern Overlay (Subtle) -->
+<div class="absolute inset-0 pointer-events-none opacity-[0.03]" data-alt="Abstract subtle grid pattern representing technical precision" style="background-image: linear-gradient(#30363D 1px, transparent 1px), linear-gradient(90deg, #30363D 1px, transparent 1px); background-size: 20px 20px;">
+</div>
+</main>
+</div>
+</body></html>

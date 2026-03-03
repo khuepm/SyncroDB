@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SyncroDB - Safe-Sync Preview</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Icons -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df2e3", // Cyan Neon
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#0D1117", // Deep Void
+                        "surface": "#161B22", // Panel Background
+                        "border-subtle": "#30363D",
+                        "diff-add": "#2EA043", // Green
+                        "diff-mod": "#D29922", // Yellow
+                        "diff-del": "#F85149", // Red
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "2px", "lg": "4px", "xl": "6px", "full": "9999px"},
+                    boxShadow: {
+                        "neon": "0 0 5px rgba(13, 242, 227, 0.2), 0 0 20px rgba(13, 242, 227, 0.1)",
+                        "danger": "0 0 5px rgba(248, 81, 73, 0.2), 0 0 20px rgba(248, 81, 73, 0.1)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom scrollbar for cyber-industrial look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0D1117; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363D; 
+            border: 1px solid #0D1117;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0df2e3; 
+        }
+
+        /* Scanline effect */
+        .scanlines {
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.15),
+                rgba(0, 0, 0, 0.15) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+        }
+        
+        /* Blinking cursor for terminal effect */
+        .cursor-blink {
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="bg-background-dark text-[#E6EDF3] font-display min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+<!-- Background Elements for context -->
+<div class="absolute inset-0 z-0 pointer-events-none">
+<div class="absolute top-0 left-0 w-full h-full bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03]"></div>
+<!-- Grid Pattern -->
+<div class="absolute inset-0 bg-[linear-gradient(to_right,#30363D_1px,transparent_1px),linear-gradient(to_bottom,#30363D_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-20"></div>
+</div>
+<!-- Modal Backdrop -->
+<div class="fixed inset-0 bg-background-dark/80 backdrop-blur-sm z-40 flex items-center justify-center">
+<!-- Modal Container -->
+<!-- Using Red border because there is a destructive action (DROP) -->
+<div class="relative w-full max-w-[600px] bg-background-dark border border-diff-del shadow-danger flex flex-col z-50 overflow-hidden font-mono">
+<!-- Modal Header -->
+<div class="h-12 bg-diff-del/10 border-b border-diff-del flex items-center justify-between px-6 select-none">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-diff-del text-xl">warning</span>
+<h2 class="text-diff-del font-bold tracking-tight text-sm">CONFIRM_TRANSACTION <span class="opacity-50 mx-2">//</span> DESTRUCTIVE</h2>
+</div>
+<div class="text-[#8B949E] text-xs">ID: 0x8F2A...9C1</div>
+</div>
+<!-- Modal Content Area -->
+<div class="p-0 flex flex-col max-h-[70vh] overflow-y-auto">
+<!-- Summary Section -->
+<div class="p-6 pb-2">
+<p class="text-[#90cbc7] text-xs uppercase tracking-widest mb-4 opacity-70">Manifest Summary: summary_of_changes.log</p>
+<div class="space-y-1">
+<!-- Add Item -->
+<div class="group flex items-center justify-between p-2 hover:bg-surface border border-transparent hover:border-border-subtle transition-colors">
+<div class="flex items-center gap-3">
+<span class="text-diff-add font-bold text-xs">[+]</span>
+<span class="text-diff-add text-sm font-semibold">ADD COLUMN</span>
+<span class="text-[#E6EDF3] text-sm">created_at</span>
+</div>
+<span class="text-[#8B949E] text-xs font-mono">TIMESTAMP</span>
+</div>
+<!-- Alter Item -->
+<div class="group flex items-center justify-between p-2 hover:bg-surface border border-transparent hover:border-border-subtle transition-colors">
+<div class="flex items-center gap-3">
+<span class="text-diff-mod font-bold text-xs">[~]</span>
+<span class="text-diff-mod text-sm font-semibold">ALTER COLUMN</span>
+<span class="text-[#E6EDF3] text-sm">bio</span>
+</div>
+<div class="flex items-center gap-2 text-xs font-mono">
+<span class="text-[#8B949E] line-through">VARCHAR(255)</span>
+<span class="material-symbols-outlined text-[10px] text-primary">arrow_forward</span>
+<span class="text-primary">TEXT</span>
+</div>
+</div>
+<!-- Drop Item (Destructive) -->
+<div class="group flex items-center justify-between p-2 bg-diff-del/5 border border-diff-del/20 hover:border-diff-del transition-colors">
+<div class="flex items-center gap-3">
+<span class="text-diff-del font-bold text-xs">[-]</span>
+<span class="text-diff-del text-sm font-semibold">DROP INDEX</span>
+<span class="text-[#E6EDF3] text-sm">idx_user_email_old</span>
+</div>
+<span class="text-diff-del text-xs font-bold uppercase border border-diff-del/40 px-1 py-0.5 rounded">Irreversible</span>
+</div>
+</div>
+</div>
+<!-- SQL Preview Section -->
+<div class="px-6 py-4">
+<div class="border border-border-subtle bg-surface">
+<!-- Code Header -->
+<div class="flex items-center justify-between bg-[#0D1117] px-3 py-2 border-b border-border-subtle">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#8B949E] text-sm">code</span>
+<span class="text-[#8B949E] text-xs font-mono uppercase">&gt; RAW_DDL_PREVIEW</span>
+</div>
+<button class="text-primary hover:text-white transition-colors text-xs uppercase flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">content_copy</span> Copy
+                            </button>
+</div>
+<!-- Code Body -->
+<div class="p-4 font-mono text-xs overflow-x-auto relative">
+<!-- Line numbers -->
+<div class="absolute left-0 top-4 bottom-4 w-8 text-right pr-2 text-[#30363D] select-none border-r border-[#30363D]/30 bg-surface z-10">
+                                1<br/>2<br/>3
+                            </div>
+<!-- Code Content -->
+<div class="pl-8 text-[#E6EDF3] leading-relaxed whitespace-pre">
+<span class="text-primary">ALTER TABLE</span> "users" <span class="text-primary">ADD COLUMN</span> "created_at" <span class="text-diff-add">TIMESTAMP</span>;
+<span class="text-primary">ALTER TABLE</span> "users" <span class="text-primary">ALTER COLUMN</span> "bio" <span class="text-primary">TYPE</span> <span class="text-diff-mod">TEXT</span>;
+<span class="text-diff-del">DROP INDEX</span> "idx_user_email_old";<span class="text-primary cursor-blink">_</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Footer -->
+<div class="h-16 bg-[#0D1117] border-t border-border-subtle flex items-center justify-end px-6 gap-3">
+<button class="px-5 py-2 text-[#8B949E] hover:text-[#E6EDF3] text-sm font-medium tracking-wide transition-colors uppercase">
+                    Cancel_Operation()
+                </button>
+<button class="group relative px-6 py-2 bg-diff-del hover:bg-red-600 text-white text-sm font-bold tracking-wide transition-all shadow-[0_0_10px_rgba(248,81,73,0.3)] hover:shadow-[0_0_20px_rgba(248,81,73,0.6)] flex items-center gap-2 overflow-hidden">
+<span class="relative z-10">EXECUTE_MIGRATION</span>
+<span class="material-symbols-outlined relative z-10 text-sm group-hover:translate-x-1 transition-transform">bolt</span>
+<!-- Button scanline effect -->
+<div class="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%] opacity-0 group-hover:opacity-100 animate-[shimmer_1.5s_infinite]"></div>
+</button>
+</div>
+<!-- Decorative corner markers -->
+<div class="absolute top-0 left-0 w-2 h-2 border-t border-l border-diff-del"></div>
+<div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-diff-del"></div>
+<div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-diff-del"></div>
+<div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-diff-del"></div>
+</div>
+</div>
+</body></html>

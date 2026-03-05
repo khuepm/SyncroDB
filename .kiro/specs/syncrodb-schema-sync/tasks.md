@@ -118,8 +118,8 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Test circular dependency detection
     - _Requirements: 2.3, 2.4, 2.7_
 
-- [~] 5. Implement migration script generation
-  - [ ] 5.1 Create SQL generation templates for PostgreSQL
+- [-] 5. Implement migration script generation
+  - [x] 5.1 Create SQL generation templates for PostgreSQL
     - Implement templates for CREATE TABLE, ALTER TABLE, DROP TABLE
     - Implement templates for constraints, indexes, views, procedures, functions
     - Add transaction boundaries (BEGIN/COMMIT/ROLLBACK)

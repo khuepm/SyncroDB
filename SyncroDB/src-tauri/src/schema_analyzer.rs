@@ -999,3 +999,313 @@ impl SchemaAnalyzer for MySQLAnalyzer {
         })
     }
 }
+
+
+impl SQLiteAnalyzer {
+    pub fn new() -> Self {
+        Self
+    }
+
+    async fn get_tables(&self, pool: &AnyPool) -> Result<Vec<Table>> {
+        let query = r#"
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+                AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| SyncroDbError::SchemaAnalysis(format!("Failed to fetch tables: {}", e)))?;
+
+        let mut tables = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("name")?;
+
+            let columns = self.get_columns(pool, &name).await?;
+            let primary_key = self.get_primary_key(pool, &name).await?;
+            let foreign_keys = self.get_foreign_keys(pool, &name).await?;
+            let unique_constraints = Vec::new(); // Handled in indexes
+            let check_constraints = Vec::new(); // Would need to parse CREATE TABLE statement
+            let indexes = self.get_indexes(pool, &name).await?;
+            let row_count = self.get_row_count(pool, &name).await.ok();
+
+            tables.push(Table {
+                name,
+                schema: "main".to_string(), // SQLite uses "main" as default schema
+                columns,
+                primary_key,
+                foreign_keys,
+                unique_constraints,
+                check_constraints,
+                indexes,
+                row_count,
+            });
+        }
+
+        Ok(tables)
+    }
+
+    async fn get_columns(&self, pool: &AnyPool, table: &str) -> Result<Vec<Column>> {
+        let query = format!("PRAGMA table_info({})", table);
+
+        let rows = sqlx::query(&query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut columns = Vec::new();
+        for row in rows {
+            let cid: i32 = row.try_get("cid")?;
+            let name: String = row.try_get("name")?;
+            let data_type: String = row.try_get("type")?;
+            let not_null: i32 = row.try_get("notnull")?;
+            let default_value: Option<String> = row.try_get("dflt_value").ok();
+            let pk: i32 = row.try_get("pk")?;
+
+            columns.push(Column {
+                name,
+                data_type,
+                nullable: not_null == 0,
+                default_value,
+                auto_increment: pk > 0 && data_type.to_uppercase() == "INTEGER",
+                comment: None,
+                ordinal_position: cid + 1,
+            });
+        }
+
+        Ok(columns)
+    }
+
+    async fn get_primary_key(&self, pool: &AnyPool, table: &str) -> Result<Option<PrimaryKey>> {
+        let query = format!("PRAGMA table_info({})", table);
+
+        let rows = sqlx::query(&query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut pk_columns = Vec::new();
+        for row in rows {
+            let pk: i32 = row.try_get("pk")?;
+            if pk > 0 {
+                let name: String = row.try_get("name")?;
+                pk_columns.push((pk, name));
+            }
+        }
+
+        if pk_columns.is_empty() {
+            return Ok(None);
+        }
+
+        pk_columns.sort_by_key(|(order, _)| *order);
+        let columns: Vec<String> = pk_columns.into_iter().map(|(_, name)| name).collect();
+
+        Ok(Some(PrimaryKey {
+            name: format!("{}_pk", table),
+            columns,
+        }))
+    }
+
+    async fn get_foreign_keys(&self, pool: &AnyPool, table: &str) -> Result<Vec<ForeignKey>> {
+        let query = format!("PRAGMA foreign_key_list({})", table);
+
+        let rows = sqlx::query(&query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut fk_map: HashMap<i32, (String, Vec<String>, String, Vec<String>, String, String)> = HashMap::new();
+
+        for row in rows {
+            let id: i32 = row.try_get("id")?;
+            let seq: i32 = row.try_get("seq")?;
+            let table_ref: String = row.try_get("table")?;
+            let from_col: String = row.try_get("from")?;
+            let to_col: String = row.try_get("to")?;
+            let on_update: String = row.try_get("on_update")?;
+            let on_delete: String = row.try_get("on_delete")?;
+
+            let entry = fk_map.entry(id).or_insert_with(|| {
+                (
+                    format!("{}_fk_{}", table, id),
+                    Vec::new(),
+                    table_ref.clone(),
+                    Vec::new(),
+                    on_update.clone(),
+                    on_delete.clone(),
+                )
+            });
+
+            entry.1.push(from_col);
+            entry.3.push(to_col);
+        }
+
+        let foreign_keys = fk_map
+            .into_iter()
+            .map(|(_, (name, columns, referenced_table, referenced_columns, on_update, on_delete))| {
+                ForeignKey {
+                    name,
+                    columns,
+                    referenced_table,
+                    referenced_columns,
+                    on_update,
+                    on_delete,
+                }
+            })
+            .collect();
+
+        Ok(foreign_keys)
+    }
+
+    async fn get_indexes(&self, pool: &AnyPool, table: &str) -> Result<Vec<Index>> {
+        let query = format!("PRAGMA index_list({})", table);
+
+        let rows = sqlx::query(&query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut indexes = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("name")?;
+            let unique: i32 = row.try_get("unique")?;
+            let partial: i32 = row.try_get("partial")?;
+
+            // Get index columns
+            let col_query = format!("PRAGMA index_info({})", name);
+            let col_rows = sqlx::query(&col_query)
+                .fetch_all(pool)
+                .await?;
+
+            let mut columns = Vec::new();
+            for col_row in col_rows {
+                if let Ok(col_name) = col_row.try_get::<String, _>("name") {
+                    columns.push(col_name);
+                }
+            }
+
+            indexes.push(Index {
+                name,
+                columns,
+                unique: unique == 1,
+                index_type: "BTREE".to_string(), // SQLite primarily uses B-tree
+                partial: partial == 1,
+                condition: None, // Would need to parse from sqlite_master
+            });
+        }
+
+        Ok(indexes)
+    }
+
+    async fn get_row_count(&self, pool: &AnyPool, table: &str) -> Result<i64> {
+        let query = format!("SELECT COUNT(*) as count FROM {}", table);
+
+        let row = sqlx::query(&query)
+            .fetch_one(pool)
+            .await?;
+
+        let count: i64 = row.try_get("count")?;
+        Ok(count)
+    }
+
+    async fn get_views(&self, pool: &AnyPool) -> Result<Vec<View>> {
+        let query = r#"
+            SELECT name, sql
+            FROM sqlite_master
+            WHERE type = 'view'
+            ORDER BY name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut views = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("name")?;
+            let definition: String = row.try_get("sql")?;
+
+            views.push(View {
+                name,
+                schema: "main".to_string(),
+                definition,
+            });
+        }
+
+        Ok(views)
+    }
+
+    async fn get_triggers(&self, pool: &AnyPool) -> Result<Vec<Trigger>> {
+        let query = r#"
+            SELECT name, tbl_name, sql
+            FROM sqlite_master
+            WHERE type = 'trigger'
+            ORDER BY tbl_name, name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut triggers = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("name")?;
+            let table: String = row.try_get("tbl_name")?;
+            let definition: String = row.try_get("sql")?;
+
+            // Parse timing and event from SQL (simplified)
+            let timing = if definition.to_uppercase().contains("BEFORE") {
+                "BEFORE"
+            } else if definition.to_uppercase().contains("AFTER") {
+                "AFTER"
+            } else {
+                "INSTEAD OF"
+            };
+
+            let event = if definition.to_uppercase().contains("INSERT") {
+                "INSERT"
+            } else if definition.to_uppercase().contains("UPDATE") {
+                "UPDATE"
+            } else if definition.to_uppercase().contains("DELETE") {
+                "DELETE"
+            } else {
+                "UNKNOWN"
+            };
+
+            triggers.push(Trigger {
+                name,
+                table,
+                timing: timing.to_string(),
+                event: event.to_string(),
+                definition,
+            });
+        }
+
+        Ok(triggers)
+    }
+}
+
+#[async_trait]
+impl SchemaAnalyzer for SQLiteAnalyzer {
+    async fn analyze_schema(&self, pool: &AnyPool, database_name: &str) -> Result<DatabaseSchema> {
+        let tables = self.get_tables(pool).await?;
+        let views = self.get_views(pool).await?;
+        let triggers = self.get_triggers(pool).await?;
+
+        // SQLite doesn't support stored procedures or functions
+        let procedures = Vec::new();
+        let functions = Vec::new();
+        let sequences = Vec::new();
+
+        Ok(DatabaseSchema {
+            connection_id: String::new(),
+            database_name: database_name.to_string(),
+            tables,
+            views,
+            procedures,
+            functions,
+            triggers,
+            sequences,
+            analyzed_at: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+}

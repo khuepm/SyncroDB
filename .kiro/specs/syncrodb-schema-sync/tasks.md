@@ -54,7 +54,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Implement SchemaAnalyzer trait for MySQL
     - _Requirements: 2.1, 2.2, 8.1, 8.2, 8.3, 8.4, 8.5_
 
-  - [ ] 2.3 Create schema introspection queries for SQLite
+  - [x] 2.3 Create schema introspection queries for SQLite
     - Use sqlite_master and pragma queries
     - Handle SQLite limitations (no stored procedures/functions)
     - Implement SchemaAnalyzer trait for SQLite

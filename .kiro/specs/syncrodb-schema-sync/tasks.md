@@ -60,7 +60,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Implement SchemaAnalyzer trait for SQLite
     - _Requirements: 2.1, 2.2, 8.1, 8.2, 8.3_
 
-  - [ ] 2.4 Create schema introspection queries for SQL Server
+  - [x] 2.4 Create schema introspection queries for SQL Server
     - Use sys.tables, sys.columns, sys.indexes system views
     - Handle SQL Server-specific objects
     - Implement SchemaAnalyzer trait for SQL Server

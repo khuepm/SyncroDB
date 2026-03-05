@@ -1309,3 +1309,545 @@ impl SchemaAnalyzer for SQLiteAnalyzer {
         })
     }
 }
+
+
+impl SQLServerAnalyzer {
+    pub fn new() -> Self {
+        Self
+    }
+
+    async fn get_tables(&self, pool: &AnyPool) -> Result<Vec<Table>> {
+        let query = r#"
+            SELECT 
+                s.name as schema_name,
+                t.name as table_name
+            FROM sys.tables t
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE t.is_ms_shipped = 0
+            ORDER BY s.name, t.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| SyncroDbError::SchemaAnalysis(format!("Failed to fetch tables: {}", e)))?;
+
+        let mut tables = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("schema_name")?;
+            let name: String = row.try_get("table_name")?;
+
+            let columns = self.get_columns(pool, &schema, &name).await?;
+            let primary_key = self.get_primary_key(pool, &schema, &name).await?;
+            let foreign_keys = self.get_foreign_keys(pool, &schema, &name).await?;
+            let unique_constraints = self.get_unique_constraints(pool, &schema, &name).await?;
+            let check_constraints = self.get_check_constraints(pool, &schema, &name).await?;
+            let indexes = self.get_indexes(pool, &schema, &name).await?;
+            let row_count = self.get_row_count(pool, &schema, &name).await.ok();
+
+            tables.push(Table {
+                name,
+                schema,
+                columns,
+                primary_key,
+                foreign_keys,
+                unique_constraints,
+                check_constraints,
+                indexes,
+                row_count,
+            });
+        }
+
+        Ok(tables)
+    }
+
+    async fn get_columns(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<Column>> {
+        let query = r#"
+            SELECT 
+                c.name as column_name,
+                t.name as data_type,
+                c.is_nullable,
+                dc.definition as default_value,
+                c.column_id,
+                c.is_identity,
+                ep.value as comment
+            FROM sys.columns c
+            JOIN sys.tables tbl ON c.object_id = tbl.object_id
+            JOIN sys.schemas s ON tbl.schema_id = s.schema_id
+            JOIN sys.types t ON c.user_type_id = t.user_type_id
+            LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
+            LEFT JOIN sys.extended_properties ep ON ep.major_id = c.object_id 
+                AND ep.minor_id = c.column_id 
+                AND ep.name = 'MS_Description'
+            WHERE s.name = @p1 AND tbl.name = @p2
+            ORDER BY c.column_id
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut columns = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("column_name")?;
+            let data_type: String = row.try_get("data_type")?;
+            let is_nullable: bool = row.try_get("is_nullable")?;
+            let default_value: Option<String> = row.try_get("default_value").ok();
+            let ordinal_position: i32 = row.try_get("column_id")?;
+            let is_identity: bool = row.try_get("is_identity")?;
+            let comment: Option<String> = row.try_get("comment").ok();
+
+            columns.push(Column {
+                name,
+                data_type,
+                nullable: is_nullable,
+                default_value,
+                auto_increment: is_identity,
+                comment,
+                ordinal_position,
+            });
+        }
+
+        Ok(columns)
+    }
+
+    async fn get_primary_key(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Option<PrimaryKey>> {
+        let query = r#"
+            SELECT 
+                kc.name as constraint_name,
+                STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) as columns
+            FROM sys.key_constraints kc
+            JOIN sys.tables t ON kc.parent_object_id = t.object_id
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            JOIN sys.index_columns ic ON kc.parent_object_id = ic.object_id 
+                AND kc.unique_index_id = ic.index_id
+            JOIN sys.columns c ON ic.object_id = c.object_id 
+                AND ic.column_id = c.column_id
+            WHERE kc.type = 'PK'
+                AND s.name = @p1
+                AND t.name = @p2
+            GROUP BY kc.name
+        "#;
+
+        let row = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_optional(pool)
+            .await?;
+
+        if let Some(row) = row {
+            let name: String = row.try_get("constraint_name")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+
+            Ok(Some(PrimaryKey { name, columns }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn get_foreign_keys(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<ForeignKey>> {
+        let query = r#"
+            SELECT 
+                fk.name as constraint_name,
+                STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id) as columns,
+                rt.name as referenced_table,
+                STRING_AGG(rc.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id) as referenced_columns,
+                fk.update_referential_action_desc as on_update,
+                fk.delete_referential_action_desc as on_delete
+            FROM sys.foreign_keys fk
+            JOIN sys.tables t ON fk.parent_object_id = t.object_id
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
+            JOIN sys.columns c ON fkc.parent_object_id = c.object_id 
+                AND fkc.parent_column_id = c.column_id
+            JOIN sys.tables rt ON fk.referenced_object_id = rt.object_id
+            JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id 
+                AND fkc.referenced_column_id = rc.column_id
+            WHERE s.name = @p1 AND t.name = @p2
+            GROUP BY fk.name, rt.name, fk.update_referential_action_desc, fk.delete_referential_action_desc
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("constraint_name")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+            let referenced_table: String = row.try_get("referenced_table")?;
+            let ref_columns_str: String = row.try_get("referenced_columns")?;
+            let referenced_columns: Vec<String> = ref_columns_str.split(',').map(|s| s.to_string()).collect();
+            let on_update: String = row.try_get("on_update")?;
+            let on_delete: String = row.try_get("on_delete")?;
+
+            foreign_keys.push(ForeignKey {
+                name,
+                columns,
+                referenced_table,
+                referenced_columns,
+                on_update,
+                on_delete,
+            });
+        }
+
+        Ok(foreign_keys)
+    }
+
+    async fn get_unique_constraints(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<UniqueConstraint>> {
+        let query = r#"
+            SELECT 
+                kc.name as constraint_name,
+                STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) as columns
+            FROM sys.key_constraints kc
+            JOIN sys.tables t ON kc.parent_object_id = t.object_id
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            JOIN sys.index_columns ic ON kc.parent_object_id = ic.object_id 
+                AND kc.unique_index_id = ic.index_id
+            JOIN sys.columns c ON ic.object_id = c.object_id 
+                AND ic.column_id = c.column_id
+            WHERE kc.type = 'UQ'
+                AND s.name = @p1
+                AND t.name = @p2
+            GROUP BY kc.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut constraints = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("constraint_name")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+
+            constraints.push(UniqueConstraint { name, columns });
+        }
+
+        Ok(constraints)
+    }
+
+    async fn get_check_constraints(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<CheckConstraint>> {
+        let query = r#"
+            SELECT 
+                cc.name as constraint_name,
+                cc.definition
+            FROM sys.check_constraints cc
+            JOIN sys.tables t ON cc.parent_object_id = t.object_id
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE s.name = @p1 AND t.name = @p2
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut constraints = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("constraint_name")?;
+            let expression: String = row.try_get("definition")?;
+
+            constraints.push(CheckConstraint { name, expression });
+        }
+
+        Ok(constraints)
+    }
+
+    async fn get_indexes(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<Index>> {
+        let query = r#"
+            SELECT 
+                i.name as index_name,
+                STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal) as columns,
+                i.is_unique,
+                i.type_desc as index_type,
+                i.has_filter,
+                i.filter_definition
+            FROM sys.indexes i
+            JOIN sys.tables t ON i.object_id = t.object_id
+            JOIN sys.schemas s ON t.schema_id = s.schema_id
+            JOIN sys.index_columns ic ON i.object_id = ic.object_id 
+                AND i.index_id = ic.index_id
+            JOIN sys.columns c ON ic.object_id = c.object_id 
+                AND ic.column_id = c.column_id
+            WHERE s.name = @p1 
+                AND t.name = @p2
+                AND i.is_primary_key = 0
+                AND i.type > 0
+            GROUP BY i.name, i.is_unique, i.type_desc, i.has_filter, i.filter_definition
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut indexes = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("index_name")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+            let unique: bool = row.try_get("is_unique")?;
+            let index_type: String = row.try_get("index_type")?;
+            let has_filter: bool = row.try_get("has_filter")?;
+            let condition: Option<String> = row.try_get("filter_definition").ok();
+
+            indexes.push(Index {
+                name,
+                columns,
+                unique,
+                index_type,
+                partial: has_filter,
+                condition,
+            });
+        }
+
+        Ok(indexes)
+    }
+
+    async fn get_row_count(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<i64> {
+        let query = format!(
+            "SELECT COUNT(*) as count FROM [{}].[{}]",
+            schema, table
+        );
+
+        let row = sqlx::query(&query)
+            .fetch_one(pool)
+            .await?;
+
+        let count: i64 = row.try_get("count")?;
+        Ok(count)
+    }
+
+    async fn get_views(&self, pool: &AnyPool) -> Result<Vec<View>> {
+        let query = r#"
+            SELECT 
+                s.name as schema_name,
+                v.name as view_name,
+                m.definition
+            FROM sys.views v
+            JOIN sys.schemas s ON v.schema_id = s.schema_id
+            JOIN sys.sql_modules m ON v.object_id = m.object_id
+            WHERE v.is_ms_shipped = 0
+            ORDER BY s.name, v.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut views = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("schema_name")?;
+            let name: String = row.try_get("view_name")?;
+            let definition: String = row.try_get("definition")?;
+
+            views.push(View {
+                name,
+                schema,
+                definition,
+            });
+        }
+
+        Ok(views)
+    }
+
+    async fn get_procedures(&self, pool: &AnyPool) -> Result<Vec<StoredProcedure>> {
+        let query = r#"
+            SELECT 
+                s.name as schema_name,
+                p.name as procedure_name,
+                m.definition
+            FROM sys.procedures p
+            JOIN sys.schemas s ON p.schema_id = s.schema_id
+            JOIN sys.sql_modules m ON p.object_id = m.object_id
+            WHERE p.is_ms_shipped = 0
+            ORDER BY s.name, p.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut procedures = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("schema_name")?;
+            let name: String = row.try_get("procedure_name")?;
+            let definition: String = row.try_get("definition")?;
+
+            procedures.push(StoredProcedure {
+                name,
+                schema,
+                parameters: Vec::new(),
+                definition,
+            });
+        }
+
+        Ok(procedures)
+    }
+
+    async fn get_functions(&self, pool: &AnyPool) -> Result<Vec<Function>> {
+        let query = r#"
+            SELECT 
+                s.name as schema_name,
+                o.name as function_name,
+                t.name as return_type,
+                m.definition
+            FROM sys.objects o
+            JOIN sys.schemas s ON o.schema_id = s.schema_id
+            JOIN sys.sql_modules m ON o.object_id = m.object_id
+            LEFT JOIN sys.parameters p ON o.object_id = p.object_id AND p.parameter_id = 0
+            LEFT JOIN sys.types t ON p.user_type_id = t.user_type_id
+            WHERE o.type IN ('FN', 'IF', 'TF')
+                AND o.is_ms_shipped = 0
+            ORDER BY s.name, o.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut functions = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("schema_name")?;
+            let name: String = row.try_get("function_name")?;
+            let return_type: String = row.try_get("return_type").unwrap_or_else(|_| "TABLE".to_string());
+            let definition: String = row.try_get("definition")?;
+
+            functions.push(Function {
+                name,
+                schema,
+                parameters: Vec::new(),
+                return_type,
+                definition,
+            });
+        }
+
+        Ok(functions)
+    }
+
+    async fn get_triggers(&self, pool: &AnyPool) -> Result<Vec<Trigger>> {
+        let query = r#"
+            SELECT 
+                tr.name as trigger_name,
+                t.name as table_name,
+                CASE 
+                    WHEN tr.is_instead_of_trigger = 1 THEN 'INSTEAD OF'
+                    ELSE 'AFTER'
+                END as timing,
+                CASE 
+                    WHEN OBJECTPROPERTY(tr.object_id, 'ExecIsInsertTrigger') = 1 THEN 'INSERT'
+                    WHEN OBJECTPROPERTY(tr.object_id, 'ExecIsUpdateTrigger') = 1 THEN 'UPDATE'
+                    WHEN OBJECTPROPERTY(tr.object_id, 'ExecIsDeleteTrigger') = 1 THEN 'DELETE'
+                    ELSE 'UNKNOWN'
+                END as event,
+                m.definition
+            FROM sys.triggers tr
+            JOIN sys.tables t ON tr.parent_id = t.object_id
+            JOIN sys.sql_modules m ON tr.object_id = m.object_id
+            WHERE tr.is_ms_shipped = 0
+            ORDER BY t.name, tr.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut triggers = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("trigger_name")?;
+            let table: String = row.try_get("table_name")?;
+            let timing: String = row.try_get("timing")?;
+            let event: String = row.try_get("event")?;
+            let definition: String = row.try_get("definition")?;
+
+            triggers.push(Trigger {
+                name,
+                table,
+                timing,
+                event,
+                definition,
+            });
+        }
+
+        Ok(triggers)
+    }
+
+    async fn get_sequences(&self, pool: &AnyPool) -> Result<Vec<Sequence>> {
+        let query = r#"
+            SELECT 
+                s.name as schema_name,
+                seq.name as sequence_name,
+                seq.start_value,
+                seq.increment,
+                seq.minimum_value,
+                seq.maximum_value,
+                seq.is_cycling
+            FROM sys.sequences seq
+            JOIN sys.schemas s ON seq.schema_id = s.schema_id
+            ORDER BY s.name, seq.name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await?;
+
+        let mut sequences = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("schema_name")?;
+            let name: String = row.try_get("sequence_name")?;
+            let start_value: i64 = row.try_get("start_value")?;
+            let increment: i64 = row.try_get("increment")?;
+            let min_value: Option<i64> = row.try_get("minimum_value").ok();
+            let max_value: Option<i64> = row.try_get("maximum_value").ok();
+            let cycle: bool = row.try_get("is_cycling")?;
+
+            sequences.push(Sequence {
+                name,
+                schema,
+                start_value,
+                increment,
+                min_value,
+                max_value,
+                cycle,
+            });
+        }
+
+        Ok(sequences)
+    }
+}
+
+#[async_trait]
+impl SchemaAnalyzer for SQLServerAnalyzer {
+    async fn analyze_schema(&self, pool: &AnyPool, database_name: &str) -> Result<DatabaseSchema> {
+        let tables = self.get_tables(pool).await?;
+        let views = self.get_views(pool).await?;
+        let procedures = self.get_procedures(pool).await?;
+        let functions = self.get_functions(pool).await?;
+        let triggers = self.get_triggers(pool).await?;
+        let sequences = self.get_sequences(pool).await?;
+
+        Ok(DatabaseSchema {
+            connection_id: String::new(),
+            database_name: database_name.to_string(),
+            tables,
+            views,
+            procedures,
+            functions,
+            triggers,
+            sequences,
+            analyzed_at: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+}

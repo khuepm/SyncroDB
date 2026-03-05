@@ -1229,8 +1229,333 @@ impl MigrationGenerator {
         Ok(format!("DROP TRIGGER `{}`;", trigger_name))
     }
 
-    fn generate_sqlite_sql(&self, _diff: &SchemaDifference) -> Result<String> {
-        Err(SyncroDbError::Migration("SQLite SQL generation not yet implemented".to_string()))
+    fn generate_sqlite_sql(&self, diff: &SchemaDifference) -> Result<String> {
+        match (&diff.object_type, &diff.change_type) {
+            (SchemaObjectType::Table, ChangeType::Addition) => {
+                self.generate_sqlite_create_table(diff)
+            }
+            (SchemaObjectType::Table, ChangeType::Deletion) => {
+                self.generate_sqlite_drop_table(diff)
+            }
+            (SchemaObjectType::Column, ChangeType::Addition) => {
+                self.generate_sqlite_add_column(diff)
+            }
+            (SchemaObjectType::Column, ChangeType::Deletion) => {
+                // SQLite doesn't support DROP COLUMN directly - need table recreation
+                self.generate_sqlite_recreate_table_drop_column(diff)
+            }
+            (SchemaObjectType::Column, ChangeType::Modification) => {
+                // SQLite doesn't support ALTER COLUMN - need table recreation
+                self.generate_sqlite_recreate_table_alter_column(diff)
+            }
+            (SchemaObjectType::PrimaryKey, ChangeType::Addition) => {
+                // SQLite doesn't support adding PK after table creation - need table recreation
+                Err(SyncroDbError::Migration(
+                    "SQLite does not support adding primary key to existing table. Table must be recreated.".to_string()
+                ))
+            }
+            (SchemaObjectType::PrimaryKey, ChangeType::Deletion) => {
+                Err(SyncroDbError::Migration(
+                    "SQLite does not support dropping primary key. Table must be recreated.".to_string()
+                ))
+            }
+            (SchemaObjectType::ForeignKey, ChangeType::Addition) => {
+                // SQLite doesn't support adding FK after table creation - need table recreation
+                Err(SyncroDbError::Migration(
+                    "SQLite does not support adding foreign key to existing table. Table must be recreated.".to_string()
+                ))
+            }
+            (SchemaObjectType::ForeignKey, ChangeType::Deletion) => {
+                Err(SyncroDbError::Migration(
+                    "SQLite does not support dropping foreign key. Table must be recreated.".to_string()
+                ))
+            }
+            (SchemaObjectType::UniqueConstraint, ChangeType::Addition) => {
+                // Can be done via CREATE UNIQUE INDEX
+                self.generate_sqlite_create_unique_index(diff)
+            }
+            (SchemaObjectType::UniqueConstraint, ChangeType::Deletion) => {
+                self.generate_sqlite_drop_index(diff)
+            }
+            (SchemaObjectType::CheckConstraint, ChangeType::Addition) => {
+                Err(SyncroDbError::Migration(
+                    "SQLite does not support adding check constraint to existing table. Table must be recreated.".to_string()
+                ))
+            }
+            (SchemaObjectType::CheckConstraint, ChangeType::Deletion) => {
+                Err(SyncroDbError::Migration(
+                    "SQLite does not support dropping check constraint. Table must be recreated.".to_string()
+                ))
+            }
+            (SchemaObjectType::Index, ChangeType::Addition) => {
+                self.generate_sqlite_create_index(diff)
+            }
+            (SchemaObjectType::Index, ChangeType::Deletion) => {
+                self.generate_sqlite_drop_index(diff)
+            }
+            (SchemaObjectType::View, ChangeType::Addition) => {
+                self.generate_sqlite_create_view(diff)
+            }
+            (SchemaObjectType::View, ChangeType::Deletion) => {
+                self.generate_sqlite_drop_view(diff)
+            }
+            (SchemaObjectType::View, ChangeType::Modification) => {
+                // SQLite doesn't support CREATE OR REPLACE VIEW - need to drop and recreate
+                self.generate_sqlite_replace_view(diff)
+            }
+            (SchemaObjectType::Trigger, ChangeType::Addition) => {
+                self.generate_sqlite_create_trigger(diff)
+            }
+            (SchemaObjectType::Trigger, ChangeType::Deletion) => {
+                self.generate_sqlite_drop_trigger(diff)
+            }
+            _ => Err(SyncroDbError::Migration(format!(
+                "Unsupported SQLite operation: {:?} {:?}",
+                diff.object_type, diff.change_type
+            ))),
+        }
+    }
+
+    // SQLite Template Methods
+    fn generate_sqlite_create_table(&self, diff: &SchemaDifference) -> Result<String> {
+        let table: Table = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for table creation".to_string())
+            })?
+        )?;
+
+        let mut sql = format!("CREATE TABLE \"{}\" (\n", table.name);
+
+        // Add columns
+        let mut column_defs: Vec<String> = table.columns.iter().map(|col| {
+            let auto_inc = if col.auto_increment { " AUTOINCREMENT" } else { "" };
+            format!(
+                "    \"{}\" {} {}{}{}",
+                col.name,
+                col.data_type,
+                if col.nullable { "NULL" } else { "NOT NULL" },
+                col.default_value.as_ref().map(|d| format!(" DEFAULT {}", d)).unwrap_or_default(),
+                auto_inc
+            )
+        }).collect();
+
+        // Add primary key constraint if present
+        if let Some(pk) = &table.primary_key {
+            let pk_cols: Vec<String> = pk.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+            column_defs.push(format!("    PRIMARY KEY ({})", pk_cols.join(", ")));
+        }
+
+        // Add foreign key constraints
+        for fk in &table.foreign_keys {
+            let fk_cols: Vec<String> = fk.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+            let ref_cols: Vec<String> = fk.referenced_columns.iter().map(|c| format!("\"{}\"", c)).collect();
+            column_defs.push(format!(
+                "    FOREIGN KEY ({}) REFERENCES \"{}\" ({}) ON DELETE {} ON UPDATE {}",
+                fk_cols.join(", "),
+                fk.referenced_table,
+                ref_cols.join(", "),
+                fk.on_delete,
+                fk.on_update
+            ));
+        }
+
+        // Add unique constraints
+        for uc in &table.unique_constraints {
+            let uc_cols: Vec<String> = uc.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+            column_defs.push(format!("    UNIQUE ({})", uc_cols.join(", ")));
+        }
+
+        // Add check constraints
+        for cc in &table.check_constraints {
+            column_defs.push(format!("    CHECK ({})", cc.expression));
+        }
+
+        sql.push_str(&column_defs.join(",\n"));
+        sql.push_str("\n);");
+
+        Ok(sql)
+    }
+
+    fn generate_sqlite_drop_table(&self, diff: &SchemaDifference) -> Result<String> {
+        let parts: Vec<&str> = diff.object_name.split('.').collect();
+        let table_name = if parts.len() == 2 { parts[1] } else { parts[0] };
+        Ok(format!("DROP TABLE \"{}\";", table_name))
+    }
+
+    fn generate_sqlite_add_column(&self, diff: &SchemaDifference) -> Result<String> {
+        let column: Column = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for column".to_string())
+            })?
+        )?;
+
+        let parts: Vec<&str> = diff.object_name.rsplitn(3, '.').collect();
+        let table_name = if parts.len() == 3 { parts[1] } else { 
+            return Err(SyncroDbError::Migration("Invalid column name format".to_string()));
+        };
+
+        // SQLite ADD COLUMN has restrictions: no PRIMARY KEY, no UNIQUE, no NOT NULL (unless has default)
+        if !column.nullable && column.default_value.is_none() {
+            return Err(SyncroDbError::Migration(
+                "SQLite does not support adding NOT NULL column without default value. Table must be recreated.".to_string()
+            ));
+        }
+
+        Ok(format!(
+            "ALTER TABLE \"{}\"\nADD COLUMN \"{}\" {} {}{}",
+            table_name,
+            column.name,
+            column.data_type,
+            if column.nullable { "NULL" } else { "NOT NULL" },
+            column.default_value.as_ref().map(|d| format!(" DEFAULT {}", d)).unwrap_or_default()
+        ))
+    }
+
+    fn generate_sqlite_recreate_table_drop_column(&self, diff: &SchemaDifference) -> Result<String> {
+        Ok(format!(
+            "-- SQLite does not support DROP COLUMN directly\n\
+             -- Manual table recreation required:\n\
+             -- 1. CREATE TABLE new_table AS SELECT (all columns except {}) FROM old_table;\n\
+             -- 2. DROP TABLE old_table;\n\
+             -- 3. ALTER TABLE new_table RENAME TO old_table;\n\
+             -- This operation requires manual intervention.",
+            diff.object_name
+        ))
+    }
+
+    fn generate_sqlite_recreate_table_alter_column(&self, diff: &SchemaDifference) -> Result<String> {
+        Ok(format!(
+            "-- SQLite does not support ALTER COLUMN directly\n\
+             -- Manual table recreation required for column: {}\n\
+             -- 1. CREATE TABLE new_table with modified column definition\n\
+             -- 2. INSERT INTO new_table SELECT * FROM old_table;\n\
+             -- 3. DROP TABLE old_table;\n\
+             -- 4. ALTER TABLE new_table RENAME TO old_table;\n\
+             -- This operation requires manual intervention.",
+            diff.object_name
+        ))
+    }
+
+    fn generate_sqlite_create_unique_index(&self, diff: &SchemaDifference) -> Result<String> {
+        let uc: UniqueConstraint = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for unique constraint".to_string())
+            })?
+        )?;
+
+        let parts: Vec<&str> = diff.object_name.rsplitn(2, '.').collect();
+        if parts.len() != 2 {
+            return Err(SyncroDbError::Migration("Invalid unique constraint name format".to_string()));
+        }
+        let table_parts: Vec<&str> = parts[1].split('.').collect();
+        let table_name = if table_parts.len() == 2 { table_parts[1] } else { table_parts[0] };
+
+        let columns: Vec<String> = uc.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+
+        Ok(format!(
+            "CREATE UNIQUE INDEX \"{}\" ON \"{}\" ({});",
+            uc.name,
+            table_name,
+            columns.join(", ")
+        ))
+    }
+
+    fn generate_sqlite_create_index(&self, diff: &SchemaDifference) -> Result<String> {
+        let idx: Index = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for index".to_string())
+            })?
+        )?;
+
+        let parts: Vec<&str> = diff.object_name.rsplitn(2, '.').collect();
+        if parts.len() != 2 {
+            return Err(SyncroDbError::Migration("Invalid index name format".to_string()));
+        }
+        let table_parts: Vec<&str> = parts[1].split('.').collect();
+        let table_name = if table_parts.len() == 2 { table_parts[1] } else { table_parts[0] };
+
+        let unique_clause = if idx.unique { "UNIQUE " } else { "" };
+        let columns: Vec<String> = idx.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+        let where_clause = if let Some(condition) = &idx.condition {
+            format!(" WHERE {}", condition)
+        } else {
+            String::new()
+        };
+
+        Ok(format!(
+            "CREATE {}INDEX \"{}\" ON \"{}\" ({}){};",
+            unique_clause,
+            idx.name,
+            table_name,
+            columns.join(", "),
+            where_clause
+        ))
+    }
+
+    fn generate_sqlite_drop_index(&self, diff: &SchemaDifference) -> Result<String> {
+        let parts: Vec<&str> = diff.object_name.rsplitn(2, '.').collect();
+        if parts.len() != 2 {
+            return Err(SyncroDbError::Migration("Invalid index name format".to_string()));
+        }
+        let index_name = parts[0];
+
+        Ok(format!("DROP INDEX \"{}\";", index_name))
+    }
+
+    fn generate_sqlite_create_view(&self, diff: &SchemaDifference) -> Result<String> {
+        let view: View = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for view".to_string())
+            })?
+        )?;
+
+        Ok(format!(
+            "CREATE VIEW \"{}\" AS\n{};",
+            view.name, view.definition
+        ))
+    }
+
+    fn generate_sqlite_drop_view(&self, diff: &SchemaDifference) -> Result<String> {
+        let parts: Vec<&str> = diff.object_name.split('.').collect();
+        let view_name = if parts.len() == 2 { parts[1] } else { parts[0] };
+        Ok(format!("DROP VIEW \"{}\";", view_name))
+    }
+
+    fn generate_sqlite_replace_view(&self, diff: &SchemaDifference) -> Result<String> {
+        let view: View = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for view".to_string())
+            })?
+        )?;
+
+        // SQLite doesn't support CREATE OR REPLACE VIEW, so drop and recreate
+        Ok(format!(
+            "DROP VIEW IF EXISTS \"{}\";\nCREATE VIEW \"{}\" AS\n{};",
+            view.name, view.name, view.definition
+        ))
+    }
+
+    fn generate_sqlite_create_trigger(&self, diff: &SchemaDifference) -> Result<String> {
+        let trigger: Trigger = serde_json::from_value(
+            diff.source_value.clone().ok_or_else(|| {
+                SyncroDbError::Migration("Missing source value for trigger".to_string())
+            })?
+        )?;
+
+        Ok(format!(
+            "CREATE TRIGGER \"{}\"\n{};",
+            trigger.name, trigger.definition
+        ))
+    }
+
+    fn generate_sqlite_drop_trigger(&self, diff: &SchemaDifference) -> Result<String> {
+        let parts: Vec<&str> = diff.object_name.rsplitn(2, '.').collect();
+        if parts.len() != 2 {
+            return Err(SyncroDbError::Migration("Invalid trigger name format".to_string()));
+        }
+        let trigger_name = parts[0];
+
+        Ok(format!("DROP TRIGGER \"{}\";", trigger_name))
     }
 
     fn generate_sqlserver_sql(&self, _diff: &SchemaDifference) -> Result<String> {

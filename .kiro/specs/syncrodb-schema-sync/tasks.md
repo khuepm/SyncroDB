@@ -130,7 +130,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Handle MySQL-specific DDL statements
     - _Requirements: 4.1, 4.2, 4.3, 8.7_
 
-  - [ ] 5.3 Create SQL generation templates for SQLite
+  - [x] 5.3 Create SQL generation templates for SQLite
     - Adapt templates for SQLite limitations
     - Handle SQLite ALTER TABLE restrictions
     - _Requirements: 4.1, 4.2, 4.3, 8.7_

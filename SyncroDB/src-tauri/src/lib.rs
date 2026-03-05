@@ -14,6 +14,9 @@ mod schema_analyzer_tests;
 #[cfg(test)]
 mod diff_engine_tests;
 
+#[cfg(test)]
+mod migration_generator_tests;
+
 pub use error::{Result, SyncroDbError};
 pub use models::*;
 

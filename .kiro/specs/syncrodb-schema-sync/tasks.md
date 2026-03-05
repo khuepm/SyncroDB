@@ -147,7 +147,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Wrap in transaction with savepoints
     - _Requirements: 4.1, 4.2, 4.3_
 
-  - [ ] 5.6 Write property test for SQL generation correctness
+  - [x] 5.6 Write property test for SQL generation correctness
     - **Property 6: SQL Generation Correctness**
     - **Validates: Requirements 4.1, 4.2, 4.3, 8.7**
 

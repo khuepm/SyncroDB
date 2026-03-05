@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 61d28676eb9d7591e43ecda1e69fe74a93143a78eae90cd32744ec15ae2bf9b1 # shrinks to db_type = SQLServer, diff = SchemaDifference { id: "ecf5b7b6-d4e2-4e8c-b725-0e0ae85ae4fa", object_type: Column, object_name: "public.a.a", change_type: Addition, source_value: Some(Object {"autoIncrement": Bool(false), "comment": Null, "dataType": String("VARCHAR(50)"), "defaultValue": Null, "name": String("a"), "nullable": Bool(false), "ordinalPosition": Number(1)}), target_value: None, details: "Column a needs to be added", destructive: false }

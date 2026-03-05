@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Auto Commit After Task",
+  "description": "Automatically create a git commit following conventional commit format after completing each task",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Create a git commit for the completed task following conventional commit format (feat:, fix:, docs:, etc.). Stage all changes and write a clear, descriptive commit message based on what was accomplished in the task."
+  }
+}

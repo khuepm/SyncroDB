@@ -112,7 +112,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - **Property 5: Difference Report Generation**
     - **Validates: Requirements 2.8**
 
-  - [-] 4.6 Write unit tests for diff engine
+  - [x] 4.6 Write unit tests for diff engine
     - Test specific difference scenarios (added table, dropped column, modified constraint)
     - Test edge cases (empty schemas, identical schemas)
     - Test circular dependency detection

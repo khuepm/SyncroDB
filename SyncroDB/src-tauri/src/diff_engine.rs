@@ -835,7 +835,10 @@ impl DiffEngine {
     /// This function classifies operations that could result in data loss
     pub fn is_destructive(difference: &SchemaDifference) -> bool {
         match (&difference.change_type, &difference.object_type) {
-            // All deletions are destructive
+            // Index deletions are not destructive (performance impact only)
+            (ChangeType::Deletion, SchemaObjectType::Index) => false,
+
+            // All other deletions are destructive
             (ChangeType::Deletion, _) => true,
 
             // Column modifications can be destructive

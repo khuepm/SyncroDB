@@ -272,4 +272,275 @@ mod tests {
             }
         }
     }
+
+    // Additional unit tests for task 4.6
+    #[test]
+    fn test_detect_column_addition() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        source.tables.push(create_table(
+            "users",
+            "public",
+            vec![
+                create_column("id", "integer", false),
+                create_column("name", "varchar", true),
+            ],
+        ));
+
+        target.tables.push(create_table(
+            "users",
+            "public",
+            vec![create_column("id", "integer", false)],
+        ));
+
+        let diff_engine = DiffEngine::new();
+        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
+
+        assert_eq!(differences.len(), 1);
+        assert_eq!(differences[0].object_type, SchemaObjectType::Column);
+        assert_eq!(differences[0].change_type, ChangeType::Addition);
+        assert!(differences[0].object_name.contains("name"));
+        assert!(!differences[0].destructive);
+    }
+
+    #[test]
+    fn test_detect_dropped_column() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        source.tables.push(create_table(
+            "users",
+            "public",
+            vec![create_column("id", "integer", false)],
+        ));
+
+        target.tables.push(create_table(
+            "users",
+            "public",
+            vec![
+                create_column("id", "integer", false),
+                create_column("name", "varchar", true),
+            ],
+        ));
+
+        let diff_engine = DiffEngine::new();
+        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
+
+        assert_eq!(differences.len(), 1);
+        assert_eq!(differences[0].object_type, SchemaObjectType::Column);
+        assert_eq!(differences[0].change_type, ChangeType::Deletion);
+        assert!(differences[0].destructive);
+    }
+
+    #[test]
+    fn test_detect_modified_constraint() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        let mut source_table = create_table("users", "public", vec![create_column("id", "integer", false)]);
+        source_table.primary_key = Some(PrimaryKey {
+            name: "users_pkey".to_string(),
+            columns: vec!["id".to_string()],
+        });
+
+        let mut target_table = create_table("users", "public", vec![create_column("id", "integer", false)]);
+        target_table.primary_key = Some(PrimaryKey {
+            name: "users_pkey".to_string(),
+            columns: vec!["id".to_string(), "email".to_string()],
+        });
+
+        source.tables.push(source_table);
+        target.tables.push(target_table);
+
+        let diff_engine = DiffEngine::new();
+        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
+        DiffEngine::mark_destructive_operations(&mut differences);
+
+        assert!(differences.len() > 0);
+        let pk_diff = differences.iter().find(|d| d.object_type == SchemaObjectType::PrimaryKey);
+        assert!(pk_diff.is_some());
+        assert!(pk_diff.unwrap().destructive);
+    }
+
+    #[test]
+    fn test_empty_schemas() {
+        let source = create_empty_schema("source", "testdb");
+        let target = create_empty_schema("target", "testdb");
+
+        let diff_engine = DiffEngine::new();
+        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
+
+        assert_eq!(differences.len(), 0);
+    }
+
+    #[test]
+    fn test_identical_schemas() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        let table = create_table(
+            "users",
+            "public",
+            vec![
+                create_column("id", "integer", false),
+                create_column("name", "varchar", true),
+            ],
+        );
+
+        source.tables.push(table.clone());
+        target.tables.push(table);
+
+        let diff_engine = DiffEngine::new();
+        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
+
+        assert_eq!(differences.len(), 0);
+    }
+
+    #[test]
+    fn test_circular_dependency_detection() {
+        // This test verifies that the topological sort handles circular dependencies gracefully
+        let mut source = create_empty_schema("source", "testdb");
+        let target = create_empty_schema("target", "testdb");
+
+        // Create tables with potential circular foreign key dependencies
+        let mut table_a = create_table("table_a", "public", vec![create_column("id", "integer", false)]);
+        table_a.foreign_keys.push(ForeignKey {
+            name: "fk_a_to_b".to_string(),
+            columns: vec!["b_id".to_string()],
+            referenced_table: "table_b".to_string(),
+            referenced_columns: vec!["id".to_string()],
+            on_delete: "CASCADE".to_string(),
+            on_update: "CASCADE".to_string(),
+        });
+
+        let mut table_b = create_table("table_b", "public", vec![create_column("id", "integer", false)]);
+        table_b.foreign_keys.push(ForeignKey {
+            name: "fk_b_to_a".to_string(),
+            columns: vec!["a_id".to_string()],
+            referenced_table: "table_a".to_string(),
+            referenced_columns: vec!["id".to_string()],
+            on_delete: "CASCADE".to_string(),
+            on_update: "CASCADE".to_string(),
+        });
+
+        source.tables.push(table_a);
+        source.tables.push(table_b);
+
+        let diff_engine = DiffEngine::new();
+        let result = diff_engine.compare_schemas(&source, &target);
+
+        // Should not panic or error, even with circular dependencies
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_index_addition_not_destructive() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        let mut source_table = create_table("users", "public", vec![create_column("id", "integer", false)]);
+        source_table.indexes.push(Index {
+            name: "idx_users_id".to_string(),
+            columns: vec!["id".to_string()],
+            unique: false,
+            index_type: "btree".to_string(),
+            partial: false,
+            condition: None,
+        });
+
+        let target_table = create_table("users", "public", vec![create_column("id", "integer", false)]);
+
+        source.tables.push(source_table);
+        target.tables.push(target_table);
+
+        let diff_engine = DiffEngine::new();
+        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
+        DiffEngine::mark_destructive_operations(&mut differences);
+
+        let index_diff = differences.iter().find(|d| d.object_type == SchemaObjectType::Index);
+        assert!(index_diff.is_some());
+        assert!(!index_diff.unwrap().destructive);
+    }
+
+    #[test]
+    fn test_index_deletion_not_destructive() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        let source_table = create_table("users", "public", vec![create_column("id", "integer", false)]);
+
+        let mut target_table = create_table("users", "public", vec![create_column("id", "integer", false)]);
+        target_table.indexes.push(Index {
+            name: "idx_users_id".to_string(),
+            columns: vec!["id".to_string()],
+            unique: false,
+            index_type: "btree".to_string(),
+            partial: false,
+            condition: None,
+        });
+
+        source.tables.push(source_table);
+        target.tables.push(target_table);
+
+        let diff_engine = DiffEngine::new();
+        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
+        DiffEngine::mark_destructive_operations(&mut differences);
+
+        let index_diff = differences.iter().find(|d| d.object_type == SchemaObjectType::Index);
+        assert!(index_diff.is_some());
+        assert!(!index_diff.unwrap().destructive);
+    }
+
+    #[test]
+    fn test_column_type_change_is_destructive() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        source.tables.push(create_table(
+            "users",
+            "public",
+            vec![create_column("id", "bigint", false)],
+        ));
+
+        target.tables.push(create_table(
+            "users",
+            "public",
+            vec![create_column("id", "integer", false)],
+        ));
+
+        let diff_engine = DiffEngine::new();
+        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
+        DiffEngine::mark_destructive_operations(&mut differences);
+
+        let col_diff = differences.iter().find(|d| d.object_type == SchemaObjectType::Column);
+        assert!(col_diff.is_some());
+        assert!(col_diff.unwrap().destructive);
+    }
+
+    #[test]
+    fn test_column_nullability_change_is_destructive() {
+        let mut source = create_empty_schema("source", "testdb");
+        let mut target = create_empty_schema("target", "testdb");
+
+        source.tables.push(create_table(
+            "users",
+            "public",
+            vec![create_column("name", "varchar", false)], // NOT NULL
+        ));
+
+        target.tables.push(create_table(
+            "users",
+            "public",
+            vec![create_column("name", "varchar", true)], // NULL
+        ));
+
+        let diff_engine = DiffEngine::new();
+        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
+        DiffEngine::mark_destructive_operations(&mut differences);
+
+        let col_diff = differences.iter().find(|d| d.object_type == SchemaObjectType::Column);
+        assert!(col_diff.is_some());
+        assert!(col_diff.unwrap().destructive);
+    }
 }

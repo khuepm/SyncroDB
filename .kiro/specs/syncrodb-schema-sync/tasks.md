@@ -135,7 +135,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Handle SQLite ALTER TABLE restrictions
     - _Requirements: 4.1, 4.2, 4.3, 8.7_
 
-  - [ ] 5.4 Create SQL generation templates for SQL Server
+  - [x] 5.4 Create SQL generation templates for SQL Server
     - Adapt templates for T-SQL syntax
     - Handle SQL Server-specific DDL statements
     - _Requirements: 4.1, 4.2, 4.3, 8.7_

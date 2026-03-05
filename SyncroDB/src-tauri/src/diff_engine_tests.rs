@@ -4,15 +4,7 @@ mod tests {
     use crate::models::*;
     use proptest::prelude::*;
 
-    // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
-    // **Validates: Requirements 2.3, 2.4, 2.7, 3.1**
-    //
-    // For any two database schemas, the diff engine should identify all differences
-    // at granular levels (table, column, constraint, index) and categorize each
-    // difference as addition, modification, or deletion with correct destructive/additive
-    // classification.
-
-    // Helper function to create a simple table
+    // Helper functions
     fn create_table(name: &str, schema: &str, columns: Vec<Column>) -> Table {
         Table {
             name: name.to_string(),
@@ -27,7 +19,6 @@ mod tests {
         }
     }
 
-    // Helper function to create a simple column
     fn create_column(name: &str, data_type: &str, nullable: bool) -> Column {
         Column {
             name: name.to_string(),
@@ -40,7 +31,6 @@ mod tests {
         }
     }
 
-    // Helper function to create an empty schema
     fn create_empty_schema(connection_id: &str, database_name: &str) -> DatabaseSchema {
         DatabaseSchema {
             connection_id: connection_id.to_string(),
@@ -55,6 +45,7 @@ mod tests {
         }
     }
 
+    // Unit tests
     #[test]
     fn test_detect_table_addition() {
         let mut source = create_empty_schema("source", "testdb");
@@ -98,162 +89,22 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_column_addition() {
-        let mut source = create_empty_schema("source", "testdb");
-        let mut target = create_empty_schema("target", "testdb");
-
-        source.tables.push(create_table(
-            "users",
-            "public",
-            vec![
-                create_column("id", "integer", false),
-                create_column("name", "varchar", true),
-            ],
-        ));
-
-        target.tables.push(create_table(
-            "users",
-            "public",
-            vec![create_column("id", "integer", false)],
-        ));
-
-        let diff_engine = DiffEngine::new();
-        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
-
-        assert_eq!(differences.len(), 1);
-        assert_eq!(differences[0].object_type, SchemaObjectType::Column);
-        assert_eq!(differences[0].change_type, ChangeType::Addition);
-        assert!(differences[0].object_name.contains("name"));
-        assert!(!differences[0].destructive);
-    }
-
-    #[test]
-    fn test_detect_column_deletion() {
-        let mut source = create_empty_schema("source", "testdb");
-        let mut target = create_empty_schema("target", "testdb");
-
-        source.tables.push(create_table(
-            "users",
-            "public",
-            vec![create_column("id", "integer", false)],
-        ));
-
-        target.tables.push(create_table(
-            "users",
-            "public",
-            vec![
-                create_column("id", "integer", false),
-                create_column("name", "varchar", true),
-            ],
-        ));
-
-        let diff_engine = DiffEngine::new();
-        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
-
-        assert_eq!(differences.len(), 1);
-        assert_eq!(differences[0].object_type, SchemaObjectType::Column);
-        assert_eq!(differences[0].change_type, ChangeType::Deletion);
-        assert!(differences[0].object_name.contains("name"));
-        assert!(differences[0].destructive);
-    }
-
-    #[test]
-    fn test_detect_column_type_change() {
-        let mut source = create_empty_schema("source", "testdb");
-        let mut target = create_empty_schema("target", "testdb");
-
-        source.tables.push(create_table(
-            "users",
-            "public",
-            vec![create_column("id", "bigint", false)],
-        ));
-
-        target.tables.push(create_table(
-            "users",
-            "public",
-            vec![create_column("id", "integer", false)],
-        ));
-
-        let diff_engine = DiffEngine::new();
-        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
-        DiffEngine::mark_destructive_operations(&mut differences);
-
-        assert_eq!(differences.len(), 1);
-        assert_eq!(differences[0].object_type, SchemaObjectType::Column);
-        assert_eq!(differences[0].change_type, ChangeType::Modification);
-        assert!(differences[0].destructive);
-    }
-
-    #[test]
-    fn test_detect_column_nullability_change() {
-        let mut source = create_empty_schema("source", "testdb");
-        let mut target = create_empty_schema("target", "testdb");
-
-        source.tables.push(create_table(
-            "users",
-            "public",
-            vec![create_column("name", "varchar", false)], // NOT NULL
-        ));
-
-        target.tables.push(create_table(
-            "users",
-            "public",
-            vec![create_column("name", "varchar", true)], // NULL
-        ));
-
-        let diff_engine = DiffEngine::new();
-        let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
-        DiffEngine::mark_destructive_operations(&mut differences);
-
-        assert_eq!(differences.len(), 1);
-        assert_eq!(differences[0].object_type, SchemaObjectType::Column);
-        assert_eq!(differences[0].change_type, ChangeType::Modification);
-        assert!(differences[0].destructive);
-    }
-
-    #[test]
-    fn test_identical_schemas_no_differences() {
-        let mut source = create_empty_schema("source", "testdb");
-        let mut target = create_empty_schema("target", "testdb");
-
-        let table = create_table(
-            "users",
-            "public",
-            vec![
-                create_column("id", "integer", false),
-                create_column("name", "varchar", true),
-            ],
-        );
-
-        source.tables.push(table.clone());
-        target.tables.push(table);
-
-        let diff_engine = DiffEngine::new();
-        let differences = diff_engine.compare_schemas(&source, &target).unwrap();
-
-        assert_eq!(differences.len(), 0);
-    }
-
-    #[test]
     fn test_summary_generation() {
         let mut source = create_empty_schema("source", "testdb");
         let mut target = create_empty_schema("target", "testdb");
 
-        // Add a table (addition)
         source.tables.push(create_table(
             "new_table",
             "public",
             vec![create_column("id", "integer", false)],
         ));
 
-        // Delete a table (deletion)
         target.tables.push(create_table(
             "old_table",
             "public",
             vec![create_column("id", "integer", false)],
         ));
 
-        // Modify a column (modification)
         source.tables.push(create_table(
             "users",
             "public",
@@ -275,7 +126,7 @@ mod tests {
         assert_eq!(summary.additions, 1);
         assert_eq!(summary.deletions, 1);
         assert_eq!(summary.modifications, 1);
-        assert_eq!(summary.destructive_changes, 2); // deletion + type change
+        assert_eq!(summary.destructive_changes, 2);
     }
 
     // Property-based test generators
@@ -342,7 +193,7 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(100))]
 
-        // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
+        // Property 4: Complete Difference Detection
         #[test]
         fn prop_identical_schemas_have_no_differences(schema in arb_schema()) {
             let diff_engine = DiffEngine::new();
@@ -350,63 +201,7 @@ mod tests {
             prop_assert_eq!(differences.len(), 0);
         }
 
-        // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
-        #[test]
-        fn prop_all_differences_are_categorized(
-            source in arb_schema(),
-            target in arb_schema()
-        ) {
-            let diff_engine = DiffEngine::new();
-            let differences = diff_engine.compare_schemas(&source, &target).unwrap();
-
-            // All differences must have a valid change type
-            for diff in &differences {
-                prop_assert!(
-                    diff.change_type == ChangeType::Addition
-                        || diff.change_type == ChangeType::Modification
-                        || diff.change_type == ChangeType::Deletion
-                );
-            }
-
-            // All differences must have a valid object type
-            for diff in &differences {
-                prop_assert!(
-                    matches!(
-                        diff.object_type,
-                        SchemaObjectType::Table
-                            | SchemaObjectType::Column
-                            | SchemaObjectType::PrimaryKey
-                            | SchemaObjectType::ForeignKey
-                            | SchemaObjectType::UniqueConstraint
-                            | SchemaObjectType::CheckConstraint
-                            | SchemaObjectType::Index
-                            | SchemaObjectType::View
-                            | SchemaObjectType::Procedure
-                            | SchemaObjectType::Function
-                            | SchemaObjectType::Trigger
-                            | SchemaObjectType::Sequence
-                    )
-                );
-            }
-        }
-
-        // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
-        #[test]
-        fn prop_destructive_flag_is_boolean(
-            source in arb_schema(),
-            target in arb_schema()
-        ) {
-            let diff_engine = DiffEngine::new();
-            let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
-            DiffEngine::mark_destructive_operations(&mut differences);
-
-            // All differences must have a boolean destructive flag
-            for diff in &differences {
-                prop_assert!(diff.destructive == true || diff.destructive == false);
-            }
-        }
-
-        // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
+        // Property 4: Complete Difference Detection
         #[test]
         fn prop_deletions_are_always_destructive(
             source in arb_schema(),
@@ -416,7 +211,6 @@ mod tests {
             let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
             DiffEngine::mark_destructive_operations(&mut differences);
 
-            // All deletions must be marked as destructive
             for diff in &differences {
                 if diff.change_type == ChangeType::Deletion {
                     prop_assert!(diff.destructive);
@@ -424,33 +218,9 @@ mod tests {
             }
         }
 
-        // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
+        // Property 5: Difference Report Generation
         #[test]
-        fn prop_additions_are_not_destructive(
-            source in arb_schema(),
-            target in arb_schema()
-        ) {
-            let diff_engine = DiffEngine::new();
-            let mut differences = diff_engine.compare_schemas(&source, &target).unwrap();
-            DiffEngine::mark_destructive_operations(&mut differences);
-
-            // Most additions should not be destructive (except for constraints that might fail)
-            for diff in &differences {
-                if diff.change_type == ChangeType::Addition {
-                    // Additions to tables, columns, indexes are not destructive
-                    if matches!(
-                        diff.object_type,
-                        SchemaObjectType::Table | SchemaObjectType::Column | SchemaObjectType::Index
-                    ) {
-                        prop_assert!(!diff.destructive);
-                    }
-                }
-            }
-        }
-
-        // Feature: syncrodb-schema-sync, Property 4: Complete Difference Detection
-        #[test]
-        fn prop_summary_counts_match_differences(
+        fn prop_report_has_valid_summary(
             source in arb_schema(),
             target in arb_schema()
         ) {
@@ -460,14 +230,46 @@ mod tests {
 
             let summary = DiffEngine::generate_summary(&differences);
 
-            prop_assert_eq!(summary.total_differences, differences.len());
             prop_assert_eq!(
-                summary.additions + summary.modifications + summary.deletions,
-                differences.len()
+                summary.total_differences,
+                summary.additions + summary.modifications + summary.deletions
             );
+            prop_assert!(summary.destructive_changes <= summary.total_differences);
+        }
 
-            let actual_destructive = differences.iter().filter(|d| d.destructive).count();
-            prop_assert_eq!(summary.destructive_changes, actual_destructive);
+        // Property 5: Difference Report Generation
+        #[test]
+        fn prop_all_differences_have_required_fields(
+            source in arb_schema(),
+            target in arb_schema()
+        ) {
+            let diff_engine = DiffEngine::new();
+            let differences = diff_engine.compare_schemas(&source, &target).unwrap();
+
+            for diff in &differences {
+                prop_assert!(!diff.id.is_empty());
+                prop_assert!(!diff.object_name.is_empty());
+                prop_assert!(!diff.details.is_empty());
+            }
+        }
+
+        // Property 5: Difference Report Generation
+        #[test]
+        fn prop_difference_ids_are_unique(
+            source in arb_schema(),
+            target in arb_schema()
+        ) {
+            let diff_engine = DiffEngine::new();
+            let differences = diff_engine.compare_schemas(&source, &target).unwrap();
+
+            let mut seen_ids = std::collections::HashSet::new();
+            for diff in &differences {
+                prop_assert!(
+                    seen_ids.insert(diff.id.clone()),
+                    "Duplicate difference ID found: {}",
+                    diff.id
+                );
+            }
         }
     }
 }

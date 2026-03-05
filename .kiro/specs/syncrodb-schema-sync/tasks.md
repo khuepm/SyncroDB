@@ -72,11 +72,11 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Return complete DatabaseSchema structure
     - _Requirements: 2.1, 2.2, 8.6_
 
-  - [ ] 2.6 Write property test for comprehensive schema extraction
+  - [x] 2.6 Write property test for comprehensive schema extraction
     - **Property 3: Comprehensive Schema Extraction**
     - **Validates: Requirements 2.1, 2.2, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6**
 
-  - [ ] 2.7 Write unit tests for schema analysis
+  - [x] 2.7 Write unit tests for schema analysis
     - Test schema extraction for each database type
     - Test handling of complex schema objects
     - Test unsupported object warnings

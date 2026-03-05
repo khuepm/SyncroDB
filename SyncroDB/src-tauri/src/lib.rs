@@ -8,6 +8,9 @@ mod executor;
 mod credential_manager;
 mod commands;
 
+#[cfg(test)]
+mod schema_analyzer_tests;
+
 pub use error::{Result, SyncroDbError};
 pub use models::*;
 

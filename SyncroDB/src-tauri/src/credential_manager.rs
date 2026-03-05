@@ -372,15 +372,17 @@ mod tests {
                 for original in &connections {
                     let retrieved = manager.get_connection(&original.id).await.unwrap();
                     
-                    prop_assert_eq!(original.id, retrieved.id);
-                    prop_assert_eq!(original.name, retrieved.name);
-                    prop_assert_eq!(original.host, retrieved.host);
+                    prop_assert_eq!(&original.id, &retrieved.id);
+                    prop_assert_eq!(&original.name, &retrieved.name);
+                    prop_assert_eq!(&original.host, &retrieved.host);
                     prop_assert_eq!(original.port, retrieved.port);
-                    prop_assert_eq!(original.database, retrieved.database);
-                    prop_assert_eq!(original.username, retrieved.username);
-                    prop_assert_eq!(original.password, retrieved.password);
+                    prop_assert_eq!(&original.database, &retrieved.database);
+                    prop_assert_eq!(&original.username, &retrieved.username);
+                    prop_assert_eq!(&original.password, &retrieved.password);
                     prop_assert_eq!(original.ssl, retrieved.ssl);
                 }
+                
+                Ok(())
             });
         }
     }
@@ -405,22 +407,24 @@ mod tests {
                 let encrypted = manager.encrypt_password(&password).unwrap();
                 
                 // Verify encrypted data is not the same as plaintext
-                prop_assert_ne!(encrypted, password.as_bytes());
+                prop_assert_ne!(&encrypted, password.as_bytes());
                 
                 // Verify encrypted data is longer (includes nonce and tag)
                 prop_assert!(encrypted.len() > password.len());
                 
                 // Decrypt and verify we get the original password back
                 let decrypted = manager.decrypt_password(&encrypted).unwrap();
-                prop_assert_eq!(decrypted, password);
+                prop_assert_eq!(&decrypted, &password);
                 
                 // Verify encrypting the same password twice produces different ciphertext (due to random nonce)
                 let encrypted2 = manager.encrypt_password(&password).unwrap();
-                prop_assert_ne!(encrypted, encrypted2);
+                prop_assert_ne!(&encrypted, &encrypted2);
                 
                 // But both should decrypt to the same plaintext
                 let decrypted2 = manager.decrypt_password(&encrypted2).unwrap();
-                prop_assert_eq!(decrypted2, password);
+                prop_assert_eq!(&decrypted2, &password);
+                
+                Ok(())
             });
         }
         
@@ -470,11 +474,13 @@ mod tests {
                 let stored_encrypted = row.0;
                 
                 // Verify stored data is NOT the plaintext password
-                prop_assert_ne!(stored_encrypted, password.as_bytes());
+                prop_assert_ne!(&stored_encrypted, password.as_bytes());
                 
                 // Verify we can retrieve and decrypt the connection
                 let retrieved = manager.get_connection(&id).await.unwrap();
-                prop_assert_eq!(retrieved.password, password);
+                prop_assert_eq!(&retrieved.password, &password);
+                
+                Ok(())
             });
         }
     }

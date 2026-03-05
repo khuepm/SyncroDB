@@ -30,6 +30,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "1"
 anyhow = "1"
 dirs = "5"
+async-trait = "0.1"
 
 [dev-dependencies]
 proptest = "1"

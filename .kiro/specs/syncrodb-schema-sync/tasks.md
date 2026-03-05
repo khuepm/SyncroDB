@@ -48,7 +48,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Implement SchemaAnalyzer trait for PostgreSQL
     - _Requirements: 2.1, 2.2, 8.1, 8.2, 8.3, 8.4, 8.5_
 
-  - [ ] 2.2 Create schema introspection queries for MySQL
+  - [x] 2.2 Create schema introspection queries for MySQL
     - Adapt queries for MySQL information_schema
     - Handle MySQL-specific syntax and object types
     - Implement SchemaAnalyzer trait for MySQL

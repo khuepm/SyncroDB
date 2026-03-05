@@ -535,3 +535,467 @@ impl SchemaAnalyzer for PostgreSQLAnalyzer {
         })
     }
 }
+
+
+impl MySQLAnalyzer {
+    pub fn new() -> Self {
+        Self
+    }
+
+    async fn get_tables(&self, pool: &AnyPool, database: &str) -> Result<Vec<Table>> {
+        let query = r#"
+            SELECT 
+                TABLE_SCHEMA,
+                TABLE_NAME
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = ?
+                AND TABLE_TYPE = 'BASE TABLE'
+            ORDER BY TABLE_SCHEMA, TABLE_NAME
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(database)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| SyncroDbError::SchemaAnalysis(format!("Failed to fetch tables: {}", e)))?;
+
+        let mut tables = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("TABLE_SCHEMA")?;
+            let name: String = row.try_get("TABLE_NAME")?;
+
+            let columns = self.get_columns(pool, &schema, &name).await?;
+            let primary_key = self.get_primary_key(pool, &schema, &name).await?;
+            let foreign_keys = self.get_foreign_keys(pool, &schema, &name).await?;
+            let unique_constraints = self.get_unique_constraints(pool, &schema, &name).await?;
+            let check_constraints = self.get_check_constraints(pool, &schema, &name).await?;
+            let indexes = self.get_indexes(pool, &schema, &name).await?;
+            let row_count = self.get_row_count(pool, &schema, &name).await.ok();
+
+            tables.push(Table {
+                name,
+                schema,
+                columns,
+                primary_key,
+                foreign_keys,
+                unique_constraints,
+                check_constraints,
+                indexes,
+                row_count,
+            });
+        }
+
+        Ok(tables)
+    }
+
+    async fn get_columns(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<Column>> {
+        let query = r#"
+            SELECT 
+                COLUMN_NAME,
+                DATA_TYPE,
+                IS_NULLABLE,
+                COLUMN_DEFAULT,
+                ORDINAL_POSITION,
+                COLUMN_COMMENT,
+                EXTRA
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+            ORDER BY ORDINAL_POSITION
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut columns = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("COLUMN_NAME")?;
+            let data_type: String = row.try_get("DATA_TYPE")?;
+            let is_nullable: String = row.try_get("IS_NULLABLE")?;
+            let default_value: Option<String> = row.try_get("COLUMN_DEFAULT").ok();
+            let ordinal_position: i32 = row.try_get("ORDINAL_POSITION")?;
+            let comment: Option<String> = row.try_get("COLUMN_COMMENT").ok();
+            let extra: String = row.try_get("EXTRA")?;
+
+            let auto_increment = extra.to_lowercase().contains("auto_increment");
+
+            columns.push(Column {
+                name,
+                data_type,
+                nullable: is_nullable == "YES",
+                default_value,
+                auto_increment,
+                comment,
+                ordinal_position,
+            });
+        }
+
+        Ok(columns)
+    }
+
+    async fn get_primary_key(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Option<PrimaryKey>> {
+        let query = r#"
+            SELECT
+                CONSTRAINT_NAME,
+                GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) as columns
+            FROM information_schema.KEY_COLUMN_USAGE
+            WHERE CONSTRAINT_NAME = 'PRIMARY'
+                AND TABLE_SCHEMA = ?
+                AND TABLE_NAME = ?
+            GROUP BY CONSTRAINT_NAME
+        "#;
+
+        let row = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_optional(pool)
+            .await?;
+
+        if let Some(row) = row {
+            let name: String = row.try_get("CONSTRAINT_NAME")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+
+            Ok(Some(PrimaryKey { name, columns }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn get_foreign_keys(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<ForeignKey>> {
+        let query = r#"
+            SELECT
+                kcu.CONSTRAINT_NAME,
+                GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION) as columns,
+                kcu.REFERENCED_TABLE_NAME,
+                GROUP_CONCAT(kcu.REFERENCED_COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION) as referenced_columns,
+                rc.UPDATE_RULE,
+                rc.DELETE_RULE
+            FROM information_schema.KEY_COLUMN_USAGE kcu
+            JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+                ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+            WHERE kcu.TABLE_SCHEMA = ?
+                AND kcu.TABLE_NAME = ?
+                AND kcu.REFERENCED_TABLE_NAME IS NOT NULL
+            GROUP BY kcu.CONSTRAINT_NAME, kcu.REFERENCED_TABLE_NAME, rc.UPDATE_RULE, rc.DELETE_RULE
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("CONSTRAINT_NAME")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+            let referenced_table: String = row.try_get("REFERENCED_TABLE_NAME")?;
+            let ref_columns_str: String = row.try_get("referenced_columns")?;
+            let referenced_columns: Vec<String> = ref_columns_str.split(',').map(|s| s.to_string()).collect();
+            let on_update: String = row.try_get("UPDATE_RULE")?;
+            let on_delete: String = row.try_get("DELETE_RULE")?;
+
+            foreign_keys.push(ForeignKey {
+                name,
+                columns,
+                referenced_table,
+                referenced_columns,
+                on_update,
+                on_delete,
+            });
+        }
+
+        Ok(foreign_keys)
+    }
+
+    async fn get_unique_constraints(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<UniqueConstraint>> {
+        let query = r#"
+            SELECT
+                tc.CONSTRAINT_NAME,
+                GROUP_CONCAT(kcu.COLUMN_NAME ORDER BY kcu.ORDINAL_POSITION) as columns
+            FROM information_schema.TABLE_CONSTRAINTS tc
+            JOIN information_schema.KEY_COLUMN_USAGE kcu
+                ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+                AND tc.TABLE_SCHEMA = kcu.TABLE_SCHEMA
+            WHERE tc.CONSTRAINT_TYPE = 'UNIQUE'
+                AND tc.TABLE_SCHEMA = ?
+                AND tc.TABLE_NAME = ?
+            GROUP BY tc.CONSTRAINT_NAME
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut constraints = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("CONSTRAINT_NAME")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+
+            constraints.push(UniqueConstraint { name, columns });
+        }
+
+        Ok(constraints)
+    }
+
+    async fn get_check_constraints(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<CheckConstraint>> {
+        let query = r#"
+            SELECT
+                CONSTRAINT_NAME,
+                CHECK_CLAUSE
+            FROM information_schema.CHECK_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = ?
+                AND TABLE_NAME = ?
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut constraints = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("CONSTRAINT_NAME")?;
+            let expression: String = row.try_get("CHECK_CLAUSE")?;
+
+            constraints.push(CheckConstraint { name, expression });
+        }
+
+        Ok(constraints)
+    }
+
+    async fn get_indexes(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<Vec<Index>> {
+        let query = r#"
+            SELECT
+                INDEX_NAME,
+                GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) as columns,
+                NON_UNIQUE,
+                INDEX_TYPE
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = ?
+                AND TABLE_NAME = ?
+                AND INDEX_NAME != 'PRIMARY'
+            GROUP BY INDEX_NAME, NON_UNIQUE, INDEX_TYPE
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(schema)
+            .bind(table)
+            .fetch_all(pool)
+            .await?;
+
+        let mut indexes = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("INDEX_NAME")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
+            let non_unique: i32 = row.try_get("NON_UNIQUE")?;
+            let index_type: String = row.try_get("INDEX_TYPE")?;
+
+            indexes.push(Index {
+                name,
+                columns,
+                unique: non_unique == 0,
+                index_type,
+                partial: false, // MySQL doesn't support partial indexes in the same way
+                condition: None,
+            });
+        }
+
+        Ok(indexes)
+    }
+
+    async fn get_row_count(&self, pool: &AnyPool, schema: &str, table: &str) -> Result<i64> {
+        let query = format!(
+            "SELECT COUNT(*) as count FROM `{}`.`{}`",
+            schema, table
+        );
+
+        let row = sqlx::query(&query)
+            .fetch_one(pool)
+            .await?;
+
+        let count: i64 = row.try_get("count")?;
+        Ok(count)
+    }
+
+    async fn get_views(&self, pool: &AnyPool, database: &str) -> Result<Vec<View>> {
+        let query = r#"
+            SELECT
+                TABLE_SCHEMA,
+                TABLE_NAME,
+                VIEW_DEFINITION
+            FROM information_schema.VIEWS
+            WHERE TABLE_SCHEMA = ?
+            ORDER BY TABLE_SCHEMA, TABLE_NAME
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(database)
+            .fetch_all(pool)
+            .await?;
+
+        let mut views = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("TABLE_SCHEMA")?;
+            let name: String = row.try_get("TABLE_NAME")?;
+            let definition: String = row.try_get("VIEW_DEFINITION")?;
+
+            views.push(View {
+                name,
+                schema,
+                definition,
+            });
+        }
+
+        Ok(views)
+    }
+
+    async fn get_procedures(&self, pool: &AnyPool, database: &str) -> Result<Vec<StoredProcedure>> {
+        let query = r#"
+            SELECT
+                ROUTINE_SCHEMA,
+                ROUTINE_NAME,
+                ROUTINE_DEFINITION
+            FROM information_schema.ROUTINES
+            WHERE ROUTINE_SCHEMA = ?
+                AND ROUTINE_TYPE = 'PROCEDURE'
+            ORDER BY ROUTINE_SCHEMA, ROUTINE_NAME
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(database)
+            .fetch_all(pool)
+            .await?;
+
+        let mut procedures = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("ROUTINE_SCHEMA")?;
+            let name: String = row.try_get("ROUTINE_NAME")?;
+            let definition: String = row.try_get("ROUTINE_DEFINITION").unwrap_or_default();
+
+            procedures.push(StoredProcedure {
+                name,
+                schema,
+                parameters: Vec::new(),
+                definition,
+            });
+        }
+
+        Ok(procedures)
+    }
+
+    async fn get_functions(&self, pool: &AnyPool, database: &str) -> Result<Vec<Function>> {
+        let query = r#"
+            SELECT
+                ROUTINE_SCHEMA,
+                ROUTINE_NAME,
+                DTD_IDENTIFIER as return_type,
+                ROUTINE_DEFINITION
+            FROM information_schema.ROUTINES
+            WHERE ROUTINE_SCHEMA = ?
+                AND ROUTINE_TYPE = 'FUNCTION'
+            ORDER BY ROUTINE_SCHEMA, ROUTINE_NAME
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(database)
+            .fetch_all(pool)
+            .await?;
+
+        let mut functions = Vec::new();
+        for row in rows {
+            let schema: String = row.try_get("ROUTINE_SCHEMA")?;
+            let name: String = row.try_get("ROUTINE_NAME")?;
+            let return_type: String = row.try_get("return_type")?;
+            let definition: String = row.try_get("ROUTINE_DEFINITION").unwrap_or_default();
+
+            functions.push(Function {
+                name,
+                schema,
+                parameters: Vec::new(),
+                return_type,
+                definition,
+            });
+        }
+
+        Ok(functions)
+    }
+
+    async fn get_triggers(&self, pool: &AnyPool, database: &str) -> Result<Vec<Trigger>> {
+        let query = r#"
+            SELECT
+                TRIGGER_NAME,
+                EVENT_OBJECT_TABLE as table_name,
+                ACTION_TIMING as timing,
+                EVENT_MANIPULATION as event,
+                ACTION_STATEMENT as definition
+            FROM information_schema.TRIGGERS
+            WHERE TRIGGER_SCHEMA = ?
+            ORDER BY EVENT_OBJECT_TABLE, TRIGGER_NAME
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(database)
+            .fetch_all(pool)
+            .await?;
+
+        let mut triggers = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("TRIGGER_NAME")?;
+            let table: String = row.try_get("table_name")?;
+            let timing: String = row.try_get("timing")?;
+            let event: String = row.try_get("event")?;
+            let definition: String = row.try_get("definition")?;
+
+            triggers.push(Trigger {
+                name,
+                table,
+                timing,
+                event,
+                definition,
+            });
+        }
+
+        Ok(triggers)
+    }
+
+    async fn get_sequences(&self, _pool: &AnyPool, _database: &str) -> Result<Vec<Sequence>> {
+        // MySQL doesn't have sequences like PostgreSQL
+        // Auto-increment is handled at the column level
+        Ok(Vec::new())
+    }
+}
+
+#[async_trait]
+impl SchemaAnalyzer for MySQLAnalyzer {
+    async fn analyze_schema(&self, pool: &AnyPool, database_name: &str) -> Result<DatabaseSchema> {
+        let tables = self.get_tables(pool, database_name).await?;
+        let views = self.get_views(pool, database_name).await?;
+        let procedures = self.get_procedures(pool, database_name).await?;
+        let functions = self.get_functions(pool, database_name).await?;
+        let triggers = self.get_triggers(pool, database_name).await?;
+        let sequences = self.get_sequences(pool, database_name).await?;
+
+        Ok(DatabaseSchema {
+            connection_id: String::new(),
+            database_name: database_name.to_string(),
+            tables,
+            views,
+            procedures,
+            functions,
+            triggers,
+            sequences,
+            analyzed_at: chrono::Utc::now().to_rfc3339(),
+        })
+    }
+}

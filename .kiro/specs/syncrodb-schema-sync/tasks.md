@@ -151,7 +151,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - **Property 6: SQL Generation Correctness**
     - **Validates: Requirements 4.1, 4.2, 4.3, 8.7**
 
-  - [ ] 5.7 Write unit tests for migration generator
+  - [x] 5.7 Write unit tests for migration generator
     - Test SQL generation for each database dialect
     - Test transaction boundary insertion
     - Test operation ordering with dependencies

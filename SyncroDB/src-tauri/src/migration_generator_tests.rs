@@ -470,4 +470,299 @@ mod unit_tests {
         assert!(script.contains("WARNING: DESTRUCTIVE OPERATION"));
         assert!(script.contains("DROP TABLE public.old_table"));
     }
+
+    #[test]
+    fn test_sqlite_create_table_with_constraints() {
+        let generator = MigrationGenerator::new(DatabaseType::SQLite);
+        
+        let table = Table {
+            name: "orders".to_string(),
+            schema: "main".to_string(),
+            columns: vec![
+                Column {
+                    name: "id".to_string(),
+                    data_type: "INTEGER".to_string(),
+                    nullable: false,
+                    default_value: None,
+                    auto_increment: true,
+                    comment: None,
+                    ordinal_position: 1,
+                },
+                Column {
+                    name: "customer_id".to_string(),
+                    data_type: "INTEGER".to_string(),
+                    nullable: false,
+                    default_value: None,
+                    auto_increment: false,
+                    comment: None,
+                    ordinal_position: 2,
+                },
+            ],
+            primary_key: Some(PrimaryKey {
+                name: "pk_orders".to_string(),
+                columns: vec!["id".to_string()],
+            }),
+            foreign_keys: vec![ForeignKey {
+                name: "fk_customer".to_string(),
+                columns: vec!["customer_id".to_string()],
+                referenced_table: "customers".to_string(),
+                referenced_columns: vec!["id".to_string()],
+                on_delete: "CASCADE".to_string(),
+                on_update: "NO ACTION".to_string(),
+            }],
+            unique_constraints: vec![],
+            check_constraints: vec![],
+            indexes: vec![],
+            row_count: None,
+        };
+
+        let diff = SchemaDifference {
+            id: Uuid::new_v4().to_string(),
+            object_type: SchemaObjectType::Table,
+            object_name: "main.orders".to_string(),
+            change_type: ChangeType::Addition,
+            source_value: Some(serde_json::to_value(&table).unwrap()),
+            target_value: None,
+            details: "Table orders needs to be added".to_string(),
+            destructive: false,
+        };
+
+        let script = generator.generate_script(&[diff.clone()], &[diff.id]).unwrap();
+
+        assert!(script.contains("CREATE TABLE \"orders\""));
+        assert!(script.contains("PRIMARY KEY"));
+        assert!(script.contains("FOREIGN KEY"));
+        assert!(script.contains("REFERENCES \"customers\""));
+    }
+
+    #[test]
+    fn test_sqlserver_uses_square_brackets() {
+        let generator = MigrationGenerator::new(DatabaseType::SQLServer);
+        
+        let table = Table {
+            name: "employees".to_string(),
+            schema: "dbo".to_string(),
+            columns: vec![
+                Column {
+                    name: "id".to_string(),
+                    data_type: "INT".to_string(),
+                    nullable: false,
+                    default_value: None,
+                    auto_increment: true,
+                    comment: None,
+                    ordinal_position: 1,
+                },
+            ],
+            primary_key: None,
+            foreign_keys: vec![],
+            unique_constraints: vec![],
+            check_constraints: vec![],
+            indexes: vec![],
+            row_count: None,
+        };
+
+        let diff = SchemaDifference {
+            id: Uuid::new_v4().to_string(),
+            object_type: SchemaObjectType::Table,
+            object_name: "dbo.employees".to_string(),
+            change_type: ChangeType::Addition,
+            source_value: Some(serde_json::to_value(&table).unwrap()),
+            target_value: None,
+            details: "Table employees needs to be added".to_string(),
+            destructive: false,
+        };
+
+        let script = generator.generate_script(&[diff.clone()], &[diff.id]).unwrap();
+
+        assert!(script.contains("[dbo].[employees]"));
+        assert!(script.contains("[id] INT NOT NULL IDENTITY(1,1)"));
+    }
+
+    #[test]
+    fn test_operation_ordering_tables_before_foreign_keys() {
+        let generator = MigrationGenerator::new(DatabaseType::PostgreSQL);
+        
+        // Create a foreign key difference (should come after table)
+        let fk_diff = SchemaDifference {
+            id: "fk-1".to_string(),
+            object_type: SchemaObjectType::ForeignKey,
+            object_name: "public.orders.fk_customer".to_string(),
+            change_type: ChangeType::Addition,
+            source_value: Some(serde_json::to_value(&ForeignKey {
+                name: "fk_customer".to_string(),
+                columns: vec!["customer_id".to_string()],
+                referenced_table: "customers".to_string(),
+                referenced_columns: vec!["id".to_string()],
+                on_delete: "CASCADE".to_string(),
+                on_update: "NO ACTION".to_string(),
+            }).unwrap()),
+            target_value: None,
+            details: "FK needs to be added".to_string(),
+            destructive: false,
+        };
+
+        // Create a table difference (should come before FK)
+        let table_diff = SchemaDifference {
+            id: "table-1".to_string(),
+            object_type: SchemaObjectType::Table,
+            object_name: "public.orders".to_string(),
+            change_type: ChangeType::Addition,
+            source_value: Some(serde_json::to_value(&Table {
+                name: "orders".to_string(),
+                schema: "public".to_string(),
+                columns: vec![],
+                primary_key: None,
+                foreign_keys: vec![],
+                unique_constraints: vec![],
+                check_constraints: vec![],
+                indexes: vec![],
+                row_count: None,
+            }).unwrap()),
+            target_value: None,
+            details: "Table needs to be added".to_string(),
+            destructive: false,
+        };
+
+        // Pass FK first, but it should be reordered after table
+        let diffs = vec![fk_diff.clone(), table_diff.clone()];
+        let operation_ids = vec![fk_diff.id.clone(), table_diff.id.clone()];
+        
+        let script = generator.generate_script(&diffs, &operation_ids).unwrap();
+
+        // Find positions of CREATE TABLE and ADD CONSTRAINT
+        let table_pos = script.find("CREATE TABLE").unwrap();
+        let fk_pos = script.find("ADD CONSTRAINT").unwrap();
+
+        // Table should come before FK
+        assert!(table_pos < fk_pos, "Table creation should come before foreign key");
+    }
+
+    #[test]
+    fn test_transaction_boundaries_for_each_database() {
+        // PostgreSQL
+        let pg_gen = MigrationGenerator::new(DatabaseType::PostgreSQL);
+        let diff = create_simple_table_diff();
+        let script = pg_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.starts_with("BEGIN;"));
+        assert!(script.ends_with("COMMIT;"));
+
+        // MySQL
+        let mysql_gen = MigrationGenerator::new(DatabaseType::MySQL);
+        let diff = create_simple_table_diff();
+        let script = mysql_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.starts_with("START TRANSACTION;"));
+        assert!(script.ends_with("COMMIT;"));
+
+        // SQLite
+        let sqlite_gen = MigrationGenerator::new(DatabaseType::SQLite);
+        let diff = create_simple_table_diff();
+        let script = sqlite_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.starts_with("BEGIN;"));
+        assert!(script.ends_with("COMMIT;"));
+
+        // SQL Server
+        let sqlserver_gen = MigrationGenerator::new(DatabaseType::SQLServer);
+        let diff = create_simple_table_diff();
+        let script = sqlserver_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.starts_with("BEGIN TRANSACTION;"));
+        assert!(script.ends_with("COMMIT;"));
+    }
+
+    #[test]
+    fn test_savepoints_for_multiple_operations() {
+        let generator = MigrationGenerator::new(DatabaseType::PostgreSQL);
+        
+        let diffs = vec![
+            create_simple_table_diff(),
+            create_simple_table_diff(),
+            create_simple_table_diff(),
+        ];
+        let operation_ids: Vec<String> = diffs.iter().map(|d| d.id.clone()).collect();
+        
+        let script = generator.generate_script(&diffs, &operation_ids).unwrap();
+
+        // Should have 3 savepoints
+        assert!(script.contains("SAVEPOINT sp_operation_1"));
+        assert!(script.contains("SAVEPOINT sp_operation_2"));
+        assert!(script.contains("SAVEPOINT sp_operation_3"));
+    }
+
+    #[test]
+    fn test_index_creation_all_databases() {
+        let index = Index {
+            name: "idx_email".to_string(),
+            columns: vec!["email".to_string()],
+            unique: true,
+            index_type: "BTREE".to_string(),
+            partial: false,
+            condition: None,
+        };
+
+        let diff = SchemaDifference {
+            id: Uuid::new_v4().to_string(),
+            object_type: SchemaObjectType::Index,
+            object_name: "public.users.idx_email".to_string(),
+            change_type: ChangeType::Addition,
+            source_value: Some(serde_json::to_value(&index).unwrap()),
+            target_value: None,
+            details: "Index needs to be added".to_string(),
+            destructive: false,
+        };
+
+        // PostgreSQL
+        let pg_gen = MigrationGenerator::new(DatabaseType::PostgreSQL);
+        let script = pg_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.contains("CREATE UNIQUE INDEX idx_email"));
+
+        // MySQL
+        let mysql_gen = MigrationGenerator::new(DatabaseType::MySQL);
+        let script = mysql_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.contains("CREATE UNIQUE INDEX `idx_email`"));
+
+        // SQLite
+        let sqlite_gen = MigrationGenerator::new(DatabaseType::SQLite);
+        let script = sqlite_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.contains("CREATE UNIQUE INDEX \"idx_email\""));
+
+        // SQL Server
+        let sqlserver_gen = MigrationGenerator::new(DatabaseType::SQLServer);
+        let script = sqlserver_gen.generate_script(&[diff.clone()], &[diff.id.clone()]).unwrap();
+        assert!(script.contains("CREATE UNIQUE NONCLUSTERED INDEX [idx_email]"));
+    }
+
+    // Helper function
+    fn create_simple_table_diff() -> SchemaDifference {
+        let table = Table {
+            name: format!("test_table_{}", Uuid::new_v4().to_string().replace("-", "_")),
+            schema: "public".to_string(),
+            columns: vec![
+                Column {
+                    name: "id".to_string(),
+                    data_type: "INTEGER".to_string(),
+                    nullable: false,
+                    default_value: None,
+                    auto_increment: false,
+                    comment: None,
+                    ordinal_position: 1,
+                },
+            ],
+            primary_key: None,
+            foreign_keys: vec![],
+            unique_constraints: vec![],
+            check_constraints: vec![],
+            indexes: vec![],
+            row_count: None,
+        };
+
+        SchemaDifference {
+            id: Uuid::new_v4().to_string(),
+            object_type: SchemaObjectType::Table,
+            object_name: format!("public.{}", table.name),
+            change_type: ChangeType::Addition,
+            source_value: Some(serde_json::to_value(&table).unwrap()),
+            target_value: None,
+            details: format!("Table {} needs to be added", table.name),
+            destructive: false,
+        }
+    }
 }

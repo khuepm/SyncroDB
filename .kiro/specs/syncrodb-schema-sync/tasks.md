@@ -104,11 +104,11 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Generate ComparisonSummary statistics
     - _Requirements: 2.3, 2.4, 2.8_
 
-  - [-] 4.4 Write property test for complete difference detection
+  - [x] 4.4 Write property test for complete difference detection
     - **Property 4: Complete Difference Detection**
     - **Validates: Requirements 2.3, 2.4, 2.7, 3.1**
 
-  - [ ] 4.5 Write property test for difference report generation
+  - [-] 4.5 Write property test for difference report generation
     - **Property 5: Difference Report Generation**
     - **Validates: Requirements 2.8**
 

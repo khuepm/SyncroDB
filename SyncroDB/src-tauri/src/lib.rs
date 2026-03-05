@@ -11,6 +11,9 @@ mod commands;
 #[cfg(test)]
 mod schema_analyzer_tests;
 
+#[cfg(test)]
+mod diff_engine_tests;
+
 pub use error::{Result, SyncroDbError};
 pub use models::*;
 

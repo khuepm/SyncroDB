@@ -116,3 +116,32 @@ pub async fn analyze_schema(
 
     Ok(schema)
 }
+
+#[tauri::command]
+pub async fn compare_schemas(
+    source_id: String,
+    target_id: String,
+    state: State<'_, AppState>,
+) -> std::result::Result<crate::models::SchemaComparison, String> {
+    // Analyze both schemas
+    let source_schema = analyze_schema(source_id.clone(), state.clone()).await?;
+    let target_schema = analyze_schema(target_id.clone(), state.clone()).await?;
+
+    // Run diff engine comparison
+    let diff_engine = crate::diff_engine::DiffEngine::new();
+    let mut differences = diff_engine.compare_schemas(&source_schema, &target_schema)?;
+
+    // Mark destructive operations
+    crate::diff_engine::DiffEngine::mark_destructive_operations(&mut differences);
+
+    // Generate summary statistics
+    let summary = crate::diff_engine::DiffEngine::generate_summary(&differences);
+
+    Ok(crate::models::SchemaComparison {
+        source_id,
+        target_id,
+        differences,
+        summary,
+        compared_at: chrono::Utc::now().to_rfc3339(),
+    })
+}

@@ -98,13 +98,13 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Mark destructive operations in SchemaDifference
     - _Requirements: 3.1, 3.2, 7.5_
 
-  - [-] 4.3 Implement compare_schemas Tauri command
+  - [x] 4.3 Implement compare_schemas Tauri command
     - Call analyze_schema for both source and target
     - Run DiffEngine comparison
     - Generate ComparisonSummary statistics
     - _Requirements: 2.3, 2.4, 2.8_
 
-  - [ ] 4.4 Write property test for complete difference detection
+  - [-] 4.4 Write property test for complete difference detection
     - **Property 4: Complete Difference Detection**
     - **Validates: Requirements 2.3, 2.4, 2.7, 3.1**
 

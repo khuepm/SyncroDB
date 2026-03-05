@@ -92,13 +92,13 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Implement dependency analysis and topological sorting
     - _Requirements: 2.3, 2.4, 2.7_
 
-  - [-] 4.2 Implement destructive operation detection
+  - [x] 4.2 Implement destructive operation detection
     - Create is_destructive function for each change type
     - Classify column type changes, nullability changes, deletions
     - Mark destructive operations in SchemaDifference
     - _Requirements: 3.1, 3.2, 7.5_
 
-  - [ ] 4.3 Implement compare_schemas Tauri command
+  - [-] 4.3 Implement compare_schemas Tauri command
     - Call analyze_schema for both source and target
     - Run DiffEngine comparison
     - Generate ComparisonSummary statistics

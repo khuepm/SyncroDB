@@ -828,3 +828,99 @@ impl DiffEngine {
         Ok(sorted_differences)
     }
 }
+
+
+impl DiffEngine {
+    /// Determine if a change is destructive
+    /// This function classifies operations that could result in data loss
+    pub fn is_destructive(difference: &SchemaDifference) -> bool {
+        match (&difference.change_type, &difference.object_type) {
+            // All deletions are destructive
+            (ChangeType::Deletion, _) => true,
+
+            // Column modifications can be destructive
+            (ChangeType::Modification, SchemaObjectType::Column) => {
+                Self::is_column_modification_destructive(difference)
+            }
+
+            // Primary key modifications are destructive
+            (ChangeType::Modification, SchemaObjectType::PrimaryKey) => true,
+
+            // Foreign key modifications are destructive
+            (ChangeType::Modification, SchemaObjectType::ForeignKey) => true,
+
+            // Constraint modifications are destructive
+            (ChangeType::Modification, SchemaObjectType::UniqueConstraint) => true,
+            (ChangeType::Modification, SchemaObjectType::CheckConstraint) => true,
+
+            // View, procedure, function, trigger modifications are destructive
+            (ChangeType::Modification, SchemaObjectType::View) => true,
+            (ChangeType::Modification, SchemaObjectType::Procedure) => true,
+            (ChangeType::Modification, SchemaObjectType::Function) => true,
+            (ChangeType::Modification, SchemaObjectType::Trigger) => true,
+
+            // Table modifications (should not happen at this level)
+            (ChangeType::Modification, SchemaObjectType::Table) => true,
+
+            // Additions and index operations are generally not destructive
+            _ => false,
+        }
+    }
+
+    /// Check if a column modification is destructive
+    fn is_column_modification_destructive(difference: &SchemaDifference) -> bool {
+        if let (Some(source_val), Some(target_val)) = (&difference.source_value, &difference.target_value) {
+            if let (Ok(source_col), Ok(target_col)) = (
+                serde_json::from_value::<Column>(source_val.clone()),
+                serde_json::from_value::<Column>(target_val.clone()),
+            ) {
+                // Type change is destructive
+                if source_col.data_type != target_col.data_type {
+                    return true;
+                }
+                // Making column NOT NULL when it was nullable is destructive
+                if !source_col.nullable && target_col.nullable {
+                    return true;
+                }
+                // Removing default value can be destructive
+                if source_col.default_value.is_none() && target_col.default_value.is_some() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Mark all differences with their destructive status
+    pub fn mark_destructive_operations(differences: &mut [SchemaDifference]) {
+        for diff in differences.iter_mut() {
+            diff.destructive = Self::is_destructive(diff);
+        }
+    }
+
+    /// Get summary statistics for differences
+    pub fn generate_summary(differences: &[SchemaDifference]) -> ComparisonSummary {
+        let total_differences = differences.len();
+        let additions = differences
+            .iter()
+            .filter(|d| d.change_type == ChangeType::Addition)
+            .count();
+        let modifications = differences
+            .iter()
+            .filter(|d| d.change_type == ChangeType::Modification)
+            .count();
+        let deletions = differences
+            .iter()
+            .filter(|d| d.change_type == ChangeType::Deletion)
+            .count();
+        let destructive_changes = differences.iter().filter(|d| d.destructive).count();
+
+        ComparisonSummary {
+            total_differences,
+            additions,
+            modifications,
+            deletions,
+            destructive_changes,
+        }
+    }
+}

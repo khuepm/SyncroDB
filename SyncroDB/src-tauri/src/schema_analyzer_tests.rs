@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::schema_analyzer::{SchemaAnalyzer, SQLiteAnalyzer};
-    use sqlx::SqlitePool;
+    use sqlx::{SqlitePool, AnyPool};
 
     // Feature: syncrodb-schema-sync, Property 3: Comprehensive Schema Extraction
     // **Validates: Requirements 2.1, 2.2, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6**
@@ -76,8 +76,64 @@ mod tests {
         .await
         .expect("Failed to create trigger");
 
-        // Convert to AnyPool
-        let any_pool: sqlx::AnyPool = pool.into();
+        // Convert to AnyPool using connection string
+        let any_pool = AnyPool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create AnyPool");
+
+        // Recreate schema in AnyPool (since it's a new connection)
+        sqlx::query(
+            r#"
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            "#,
+        )
+        .execute(&any_pool)
+        .await
+        .expect("Failed to create users table");
+
+        sqlx::query(
+            r#"
+            CREATE TABLE posts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT,
+                published BOOLEAN DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            "#,
+        )
+        .execute(&any_pool)
+        .await
+        .expect("Failed to create posts table");
+
+        sqlx::query("CREATE INDEX idx_posts_user_id ON posts(user_id)")
+            .execute(&any_pool)
+            .await
+            .expect("Failed to create index");
+
+        sqlx::query("CREATE VIEW published_posts AS SELECT * FROM posts WHERE published = 1")
+            .execute(&any_pool)
+            .await
+            .expect("Failed to create view");
+
+        sqlx::query(
+            r#"
+            CREATE TRIGGER update_timestamp
+            AFTER UPDATE ON posts
+            BEGIN
+                UPDATE posts SET created_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+            END
+            "#,
+        )
+        .execute(&any_pool)
+        .await
+        .expect("Failed to create trigger");
 
         // Analyze the schema
         let analyzer = SQLiteAnalyzer::new();
@@ -145,11 +201,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_schema_extraction_handles_empty_database() {
-        let pool = SqlitePool::connect("sqlite::memory:")
+        let any_pool = AnyPool::connect("sqlite::memory:")
             .await
             .expect("Failed to create test database");
-
-        let any_pool: sqlx::AnyPool = pool.into();
 
         let analyzer = SQLiteAnalyzer::new();
         let schema = analyzer
@@ -165,7 +219,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_schema_extraction_handles_complex_data_types() {
-        let pool = SqlitePool::connect("sqlite::memory:")
+        let any_pool = AnyPool::connect("sqlite::memory:")
             .await
             .expect("Failed to create test database");
 
@@ -181,11 +235,9 @@ mod tests {
             )
             "#,
         )
-        .execute(&pool)
+        .execute(&any_pool)
         .await
         .expect("Failed to create table");
-
-        let any_pool: sqlx::AnyPool = pool.into();
 
         let analyzer = SQLiteAnalyzer::new();
         let schema = analyzer
@@ -206,7 +258,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_schema_extraction_handles_multiple_constraints() {
-        let pool = SqlitePool::connect("sqlite::memory:")
+        let any_pool = AnyPool::connect("sqlite::memory:")
             .await
             .expect("Failed to create test database");
 
@@ -224,21 +276,19 @@ mod tests {
             )
             "#,
         )
-        .execute(&pool)
+        .execute(&any_pool)
         .await
         .expect("Failed to create table");
 
         sqlx::query("CREATE INDEX idx_products_category ON products(category_id)")
-            .execute(&pool)
+            .execute(&any_pool)
             .await
             .expect("Failed to create index");
 
         sqlx::query("CREATE INDEX idx_products_supplier ON products(supplier_id)")
-            .execute(&pool)
+            .execute(&any_pool)
             .await
             .expect("Failed to create index");
-
-        let any_pool: sqlx::AnyPool = pool.into();
 
         let analyzer = SQLiteAnalyzer::new();
         let schema = analyzer

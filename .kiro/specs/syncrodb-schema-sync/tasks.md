@@ -82,17 +82,17 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Test unsupported object warnings
     - _Requirements: 2.1, 2.2, 8.6_
 
-- [ ] 3. Checkpoint - Ensure backend foundation tests pass
+- [x] 3. Checkpoint - Ensure backend foundation tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Implement schema comparison and diff engine
-  - [ ] 4.1 Create DiffEngine with multi-phase comparison algorithm
+- [-] 4. Implement schema comparison and diff engine
+  - [x] 4.1 Create DiffEngine with multi-phase comparison algorithm
     - Implement object identification phase (additions, deletions, modifications)
     - Implement deep comparison phase for modified objects
     - Implement dependency analysis and topological sorting
     - _Requirements: 2.3, 2.4, 2.7_
 
-  - [ ] 4.2 Implement destructive operation detection
+  - [-] 4.2 Implement destructive operation detection
     - Create is_destructive function for each change type
     - Classify column type changes, nullability changes, deletions
     - Mark destructive operations in SchemaDifference
@@ -118,7 +118,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Test circular dependency detection
     - _Requirements: 2.3, 2.4, 2.7_
 
-- [ ] 5. Implement migration script generation
+- [~] 5. Implement migration script generation
   - [ ] 5.1 Create SQL generation templates for PostgreSQL
     - Implement templates for CREATE TABLE, ALTER TABLE, DROP TABLE
     - Implement templates for constraints, indexes, views, procedures, functions

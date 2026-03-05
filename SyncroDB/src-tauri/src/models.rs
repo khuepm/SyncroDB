@@ -198,3 +198,73 @@ pub struct Sequence {
     pub max_value: Option<i64>,
     pub cycle: bool,
 }
+
+// Schema Comparison Models
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaComparison {
+    #[serde(rename = "sourceId")]
+    pub source_id: String,
+    #[serde(rename = "targetId")]
+    pub target_id: String,
+    pub differences: Vec<SchemaDifference>,
+    pub summary: ComparisonSummary,
+    #[serde(rename = "comparedAt")]
+    pub compared_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SchemaDifference {
+    pub id: String,
+    #[serde(rename = "objectType")]
+    pub object_type: SchemaObjectType,
+    #[serde(rename = "objectName")]
+    pub object_name: String,
+    #[serde(rename = "changeType")]
+    pub change_type: ChangeType,
+    #[serde(rename = "sourceValue")]
+    pub source_value: Option<serde_json::Value>,
+    #[serde(rename = "targetValue")]
+    pub target_value: Option<serde_json::Value>,
+    pub details: String,
+    pub destructive: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SchemaObjectType {
+    Table,
+    Column,
+    #[serde(rename = "primary_key")]
+    PrimaryKey,
+    #[serde(rename = "foreign_key")]
+    ForeignKey,
+    #[serde(rename = "unique_constraint")]
+    UniqueConstraint,
+    #[serde(rename = "check_constraint")]
+    CheckConstraint,
+    Index,
+    View,
+    Procedure,
+    Function,
+    Trigger,
+    Sequence,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangeType {
+    Addition,
+    Modification,
+    Deletion,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComparisonSummary {
+    #[serde(rename = "totalDifferences")]
+    pub total_differences: usize,
+    pub additions: usize,
+    pub modifications: usize,
+    pub deletions: usize,
+    #[serde(rename = "destructiveChanges")]
+    pub destructive_changes: usize,
+}

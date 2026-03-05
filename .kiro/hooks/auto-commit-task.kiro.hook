@@ -8,6 +8,8 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Create a git commit for the completed task following conventional commit format (feat:, fix:, docs:, etc.). Stage all changes and write a clear, descriptive commit message based on what was accomplished in the task."
-  }
+    "prompt": "Create a git commit for the completed task following conventional commit format (feat:, fix:, docs:, etc.) and task number. Stage all changes and write a clear, descriptive commit message based on what was accomplished in the task."
+  },
+  "workspaceFolderName": "SyncroDB",
+  "shortName": "auto-commit-task"
 }

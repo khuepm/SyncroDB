@@ -125,7 +125,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Add transaction boundaries (BEGIN/COMMIT/ROLLBACK)
     - _Requirements: 4.1, 4.2, 4.3, 8.7_
 
-  - [ ] 5.2 Create SQL generation templates for MySQL
+  - [x] 5.2 Create SQL generation templates for MySQL
     - Adapt templates for MySQL syntax
     - Handle MySQL-specific DDL statements
     - _Requirements: 4.1, 4.2, 4.3, 8.7_

@@ -66,7 +66,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Implement SchemaAnalyzer trait for SQL Server
     - _Requirements: 2.1, 2.2, 8.1, 8.2, 8.3, 8.4, 8.5_
 
-  - [ ] 2.5 Implement analyze_schema Tauri command
+  - [x] 2.5 Implement analyze_schema Tauri command
     - Route to appropriate database-specific analyzer
     - Handle unsupported objects with warnings
     - Return complete DatabaseSchema structure

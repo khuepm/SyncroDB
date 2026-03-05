@@ -205,10 +205,10 @@ impl CredentialManager {
         self.rng.fill(&mut nonce_bytes)
             .map_err(|_| SyncroDbError::Encryption("Failed to generate nonce".to_string()))?;
         
-        let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)
+        let _nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)
             .map_err(|_| SyncroDbError::Encryption("Failed to create nonce".to_string()))?;
         
-        let tag = sealing_key.seal_in_place_separate_tag(nonce, Aad::empty(), &mut in_out)
+        let tag = sealing_key.seal_in_place_separate_tag(Aad::empty(), &mut in_out)
             .map_err(|_| SyncroDbError::Encryption("Failed to encrypt password".to_string()))?;
         
         // Prepend nonce to ciphertext + tag
@@ -224,19 +224,16 @@ impl CredentialManager {
             return Err(SyncroDbError::Encryption("Invalid encrypted data".to_string()));
         }
         
-        let (nonce_bytes, ciphertext_and_tag) = encrypted.split_at(NONCE_LEN);
+        let (_nonce_bytes, ciphertext_and_tag) = encrypted.split_at(NONCE_LEN);
         
         let unbound_key = UnboundKey::new(&AES_256_GCM, &self.encryption_key)
             .map_err(|_| SyncroDbError::Encryption("Failed to create decryption key".to_string()))?;
         
         let mut opening_key = OpeningKey::new(unbound_key, RandomNonceSequence::new());
         
-        let nonce = Nonce::try_assume_unique_for_key(nonce_bytes)
-            .map_err(|_| SyncroDbError::Encryption("Failed to create nonce".to_string()))?;
-        
         let mut in_out = ciphertext_and_tag.to_vec();
         
-        let plaintext = opening_key.open_in_place(nonce, Aad::empty(), &mut in_out)
+        let plaintext = opening_key.open_in_place(Aad::empty(), &mut in_out)
             .map_err(|_| SyncroDbError::Encryption("Failed to decrypt password".to_string()))?;
         
         String::from_utf8(plaintext.to_vec())

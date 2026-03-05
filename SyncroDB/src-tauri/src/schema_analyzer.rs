@@ -116,7 +116,7 @@ impl PostgreSQLAnalyzer {
         let query = r#"
             SELECT
                 tc.constraint_name,
-                array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as columns
+                string_agg(kcu.column_name, ',' ORDER BY kcu.ordinal_position) as columns
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
                 ON tc.constraint_name = kcu.constraint_name
@@ -135,7 +135,8 @@ impl PostgreSQLAnalyzer {
 
         if let Some(row) = row {
             let name: String = row.try_get("constraint_name")?;
-            let columns: Vec<String> = row.try_get("columns")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
 
             Ok(Some(PrimaryKey { name, columns }))
         } else {
@@ -147,9 +148,9 @@ impl PostgreSQLAnalyzer {
         let query = r#"
             SELECT
                 tc.constraint_name,
-                array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as columns,
+                string_agg(kcu.column_name, ',' ORDER BY kcu.ordinal_position) as columns,
                 ccu.table_name AS referenced_table,
-                array_agg(ccu.column_name ORDER BY kcu.ordinal_position) as referenced_columns,
+                string_agg(ccu.column_name, ',' ORDER BY kcu.ordinal_position) as referenced_columns,
                 rc.update_rule,
                 rc.delete_rule
             FROM information_schema.table_constraints tc
@@ -175,9 +176,11 @@ impl PostgreSQLAnalyzer {
         let mut foreign_keys = Vec::new();
         for row in rows {
             let name: String = row.try_get("constraint_name")?;
-            let columns: Vec<String> = row.try_get("columns")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
             let referenced_table: String = row.try_get("referenced_table")?;
-            let referenced_columns: Vec<String> = row.try_get("referenced_columns")?;
+            let ref_columns_str: String = row.try_get("referenced_columns")?;
+            let referenced_columns: Vec<String> = ref_columns_str.split(',').map(|s| s.to_string()).collect();
             let on_update: String = row.try_get("update_rule")?;
             let on_delete: String = row.try_get("delete_rule")?;
 
@@ -198,7 +201,7 @@ impl PostgreSQLAnalyzer {
         let query = r#"
             SELECT
                 tc.constraint_name,
-                array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as columns
+                string_agg(kcu.column_name, ',' ORDER BY kcu.ordinal_position) as columns
             FROM information_schema.table_constraints tc
             JOIN information_schema.key_column_usage kcu
                 ON tc.constraint_name = kcu.constraint_name
@@ -218,7 +221,8 @@ impl PostgreSQLAnalyzer {
         let mut constraints = Vec::new();
         for row in rows {
             let name: String = row.try_get("constraint_name")?;
-            let columns: Vec<String> = row.try_get("columns")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
 
             constraints.push(UniqueConstraint { name, columns });
         }
@@ -260,7 +264,7 @@ impl PostgreSQLAnalyzer {
         let query = r#"
             SELECT
                 i.relname as index_name,
-                array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) as columns,
+                string_agg(a.attname, ',' ORDER BY array_position(ix.indkey, a.attnum)) as columns,
                 ix.indisunique as is_unique,
                 am.amname as index_type,
                 pg_get_expr(ix.indpred, ix.indrelid) as condition
@@ -285,7 +289,8 @@ impl PostgreSQLAnalyzer {
         let mut indexes = Vec::new();
         for row in rows {
             let name: String = row.try_get("index_name")?;
-            let columns: Vec<String> = row.try_get("columns")?;
+            let columns_str: String = row.try_get("columns")?;
+            let columns: Vec<String> = columns_str.split(',').map(|s| s.to_string()).collect();
             let unique: bool = row.try_get("is_unique")?;
             let index_type: String = row.try_get("index_type")?;
             let condition: Option<String> = row.try_get("condition").ok();
@@ -1064,12 +1069,14 @@ impl SQLiteAnalyzer {
             let default_value: Option<String> = row.try_get("dflt_value").ok();
             let pk: i32 = row.try_get("pk")?;
 
+            let auto_increment = pk > 0 && data_type.to_uppercase() == "INTEGER";
+
             columns.push(Column {
                 name,
                 data_type,
                 nullable: not_null == 0,
                 default_value,
-                auto_increment: pk > 0 && data_type.to_uppercase() == "INTEGER",
+                auto_increment,
                 comment: None,
                 ordinal_position: cid + 1,
             });
@@ -1118,7 +1125,7 @@ impl SQLiteAnalyzer {
 
         for row in rows {
             let id: i32 = row.try_get("id")?;
-            let seq: i32 = row.try_get("seq")?;
+            let _seq: i32 = row.try_get("seq")?;
             let table_ref: String = row.try_get("table")?;
             let from_col: String = row.try_get("from")?;
             let to_col: String = row.try_get("to")?;

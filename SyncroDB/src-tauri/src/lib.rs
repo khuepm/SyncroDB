@@ -15,6 +15,7 @@ use commands::AppState;
 use connection_manager::ConnectionManager;
 use credential_manager::CredentialManager;
 use std::sync::Arc;
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,6 +42,7 @@ pub fn run() {
             commands::delete_connection,
             commands::list_connections,
             commands::test_connection,
+            commands::analyze_schema,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

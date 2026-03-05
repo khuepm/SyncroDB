@@ -1,7 +1,9 @@
 use crate::connection_manager::ConnectionManager;
 use crate::credential_manager::CredentialManager;
-use crate::error::Result;
-use crate::models::{ConnectionTestResult, DatabaseConnection};
+use crate::models::{ConnectionTestResult, DatabaseConnection, DatabaseSchema, DatabaseType};
+use crate::schema_analyzer::{
+    MySQLAnalyzer, PostgreSQLAnalyzer, SQLServerAnalyzer, SQLiteAnalyzer, SchemaAnalyzer,
+};
 use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -70,4 +72,47 @@ pub async fn test_connection(
     
     let result = state.connection_manager.test_connection(&connection).await?;
     Ok(result)
+}
+
+
+#[tauri::command]
+pub async fn analyze_schema(
+    connection_id: String,
+    state: State<'_, AppState>,
+) -> std::result::Result<DatabaseSchema, String> {
+    // Get connection details
+    let credential_manager = state.credential_manager.lock().await;
+    let connection = credential_manager.get_connection(&connection_id).await?;
+    drop(credential_manager);
+
+    // Get connection pool
+    let pool = state
+        .connection_manager
+        .get_pool(&connection_id, &connection)
+        .await?;
+
+    // Route to appropriate analyzer based on database type
+    let mut schema = match connection.db_type {
+        DatabaseType::PostgreSQL => {
+            let analyzer = PostgreSQLAnalyzer::new();
+            analyzer.analyze_schema(&pool, &connection.database).await?
+        }
+        DatabaseType::MySQL => {
+            let analyzer = MySQLAnalyzer::new();
+            analyzer.analyze_schema(&pool, &connection.database).await?
+        }
+        DatabaseType::SQLite => {
+            let analyzer = SQLiteAnalyzer::new();
+            analyzer.analyze_schema(&pool, &connection.database).await?
+        }
+        DatabaseType::SQLServer => {
+            let analyzer = SQLServerAnalyzer::new();
+            analyzer.analyze_schema(&pool, &connection.database).await?
+        }
+    };
+
+    // Set the connection_id in the schema
+    schema.connection_id = connection_id;
+
+    Ok(schema)
 }

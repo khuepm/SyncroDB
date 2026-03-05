@@ -140,7 +140,7 @@ The implementation uses TypeScript/React for the frontend and Rust/Tauri for the
     - Handle SQL Server-specific DDL statements
     - _Requirements: 4.1, 4.2, 4.3, 8.7_
 
-  - [ ] 5.5 Implement generate_migration_script Tauri command
+  - [x] 5.5 Implement generate_migration_script Tauri command
     - Sort operations by dependencies
     - Generate SQL for each approved operation
     - Add safety comments for destructive operations

@@ -1,6 +1,7 @@
 use crate::connection_manager::ConnectionManager;
 use crate::credential_manager::CredentialManager;
-use crate::models::{ConnectionTestResult, DatabaseConnection, DatabaseSchema, DatabaseType};
+use crate::migration_generator::MigrationGenerator;
+use crate::models::{ConnectionTestResult, DatabaseConnection, DatabaseSchema, DatabaseType, SchemaComparison};
 use crate::schema_analyzer::{
     MySQLAnalyzer, PostgreSQLAnalyzer, SQLServerAnalyzer, SQLiteAnalyzer, SchemaAnalyzer,
 };
@@ -144,4 +145,25 @@ pub async fn compare_schemas(
         summary,
         compared_at: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+#[tauri::command]
+pub async fn generate_migration_script(
+    target_connection_id: String,
+    comparison: SchemaComparison,
+    selected_operation_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> std::result::Result<String, String> {
+    // Get target connection to determine database type
+    let credential_manager = state.credential_manager.lock().await;
+    let target_connection = credential_manager.get_connection(&target_connection_id).await?;
+    drop(credential_manager);
+
+    // Create migration generator for the target database type
+    let generator = MigrationGenerator::new(target_connection.db_type);
+
+    // Generate the migration script
+    let script = generator.generate_script(&comparison.differences, &selected_operation_ids)?;
+
+    Ok(script)
 }

@@ -1,6 +1,5 @@
 use crate::error::{Result, SyncroDbError};
 use crate::models::*;
-use std::collections::{HashMap, HashSet};
 
 pub struct MigrationGenerator {
     db_type: DatabaseType,
@@ -59,10 +58,10 @@ impl MigrationGenerator {
     }
 
     /// Sort operations by dependencies (tables before foreign keys, etc.)
-    fn sort_operations_by_dependencies(
+    fn sort_operations_by_dependencies<'a>(
         &self,
-        diffs: &[&SchemaDifference],
-    ) -> Result<Vec<&SchemaDifference>> {
+        diffs: &[&'a SchemaDifference],
+    ) -> Result<Vec<&'a SchemaDifference>> {
         let mut sorted = Vec::new();
         let mut remaining: Vec<&SchemaDifference> = diffs.to_vec();
 
@@ -1214,7 +1213,7 @@ impl MigrationGenerator {
     }
 
     fn generate_mysql_drop_trigger(&self, diff: &SchemaDifference) -> Result<String> {
-        let trigger: Trigger = serde_json::from_value(
+        let _trigger: Trigger = serde_json::from_value(
             diff.target_value.clone().ok_or_else(|| {
                 SyncroDbError::Migration("Missing target value for trigger".to_string())
             })?

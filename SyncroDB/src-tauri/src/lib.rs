@@ -50,6 +50,7 @@ pub fn run() {
             commands::test_connection,
             commands::analyze_schema,
             commands::compare_schemas,
+            commands::generate_migration_script,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
